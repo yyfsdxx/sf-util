@@ -5,7 +5,9 @@
  * ※ オブジェクト名・項目名は論理名で記載している（API 名確定後に一括置換する）。
  * ※ 従事事業応募は従事事業の主従子オブジェクトのため、参照範囲は従事事業に従う。
  *   SOQL・DML はすべてユーザモードで実行し、支部の条件は付けない。
- * ※ 他担当の設計に依存する部分（事業の入力フラグ・一括割当実行中）は「Gateway」区画のスタブで実装している。
+ * ※ 他担当の設計に依存する部分（事業の入力フラグ）は「Gateway」区画のスタブで実装している。
+ * ※ 一括割当実行中チェック・排他チェックは共通（Juj_CommonController）を呼び出す。
+ *   エラー時は共通側で AuraHandledException が発生し、そのまま画面へ返す（トランザクションはロールバックされる）。
  * ※ 業務エラーは JujiOboException で発生させ、各メソッドの入口で AuraHandledException に変換する。
  *   例外を画面へ返した時点でトランザクションはロールバックされる。
  * ※ LWC から呼び出すメソッドは、内部クラスを引数・戻り値に使用できないため、以下のとおりとする。
@@ -58,8 +60,6 @@ public with sharing class JUJ080Controller {
     private static final List<String> E_JUJISHA_NOT_FOUND = new List<String>{ 'WLP007-0009', '従事者が存在しません。' };
     @TestVisible
     private static final List<String> E_NO_JISSHIBI = new List<String>{ 'JUJ080-E002', '実施日が登録されていません。' };
-    @TestVisible
-    private static final List<String> E_BULK_ASSIGNING = new List<String>{ 'WLP007-0005', '一括割当実行中のため処理できません。' };
     // 追加モードで登録済みの従事者を登録しようとした場合（応募情報表示ボタンの押下を促す）
     @TestVisible
     private static final List<String> E_ALREADY_EXISTS = new List<String>{
@@ -68,8 +68,6 @@ public with sharing class JUJ080Controller {
     };
     @TestVisible
     private static final List<String> E_DELETED = new List<String>{ 'JUJ080-E004', '他のユーザにより削除されています。' };
-    @TestVisible
-    private static final List<String> E_UPDATED = new List<String>{ 'JUJ080-E005', '他のユーザにより更新されています。' };
     @TestVisible
     private static final List<String> E_APPLICATION_NOT_FOUND = new List<String>{ 'WLP007-0008', '対象の応募が存在しません。' };
     @TestVisible
@@ -80,6 +78,10 @@ public with sharing class JUJ080Controller {
     // 割当のフラグ項目（割当フラグ・確定フラグ）は選択リスト。値 '1' で ON（仮割当・確定）
     @TestVisible
     private static final String FLAG_ON = '1';
+
+    // 共通チェックの引数
+    private static final String OBO_OBJECT_NAME = '従事事業応募__c'; // 排他チェック対象のオブジェクト API 名
+    private static final Set<String> NO_CHECK_KEYS = new Set<String>(); // 一括割当チェックの checkKeys（現在は未使用のため空）
 
     // ==================== 2.(1) 事業の取得 ====================
     // 戻り値：{ basyoName, jigyo: { jigyoName, shibuCode, shibuName, lastUketukeNo, inputControl } | null }
@@ -169,9 +171,22 @@ public with sharing class JUJ080Controller {
                 throw error(E_NO_JISSHIBI);
             }
             // ③ 一括割当実行中の場合はエラー
-            if (isBulkAssigning(jigyo.Id)) {
-                throw error(E_BULK_ASSIGNING);
+            checkBulkAssigning(jigyo.Id);
+        } catch (JujiOboException e) {
+            throw toAuraException(e);
+        }
+    }
+
+    // ==================== 7.(1)④ 登録確認前のチェック ====================
+    // 一括割当実行中の場合はエラー（登録処理内でも再チェックする）
+    @AuraEnabled
+    public static void checkSave(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo) {
+        try {
+            従事事業__c jigyo = selectJigyo(toKey(jujiJigyoNo, jujiBasyoNo, jisiNendo), false);
+            if (jigyo == null) {
+                throw error(E_JIGYO_NOT_FOUND);
             }
+            checkBulkAssigning(jigyo.Id);
         } catch (JujiOboException e) {
             throw toAuraException(e);
         }
@@ -192,9 +207,7 @@ public with sharing class JUJ080Controller {
             if (jigyo == null) {
                 throw error(E_JIGYO_NOT_FOUND);
             }
-            if (isBulkAssigning(jigyo.Id)) {
-                throw error(E_BULK_ASSIGNING);
-            }
+            checkBulkAssigning(jigyo.Id);
 
             // ② 従事者を取得する
             JujishaInfo jujisha = findJujisha(request.jujishaNo);
@@ -210,8 +223,8 @@ public with sharing class JUJ080Controller {
             if (!isAdd && existing == null) {
                 throw error(E_DELETED); // b. 他のユーザにより削除済み
             }
-            if (!isAdd && existing.LastModifiedDate != request.lastModifiedDate) {
-                throw error(E_UPDATED); // c. 他のユーザにより更新済み
+            if (!isAdd) {
+                checkUpdated(existing.Id, request.systemModstamp); // c. 他のユーザにより更新済み（共通の排他チェック）
             }
 
             // ④ 追加モード、または受付番号が 0 の場合は採番する
@@ -276,8 +289,15 @@ public with sharing class JUJ080Controller {
     }
 
     // ==================== 8.(2) 削除処理 ====================
+    // systemModstamp：画面表示時の応募のシステム更新日時（排他チェックに使用）
     @AuraEnabled
-    public static void deleteApplication(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo, String jujishaNo) {
+    public static void deleteApplication(
+        String jujiJigyoNo,
+        String jujiBasyoNo,
+        String jisiNendo,
+        String jujishaNo,
+        Datetime systemModstamp
+    ) {
         try {
             // ① 従事事業を取得してロックする
             従事事業__c jigyo = selectJigyo(toKey(jujiJigyoNo, jujiBasyoNo, jisiNendo), true);
@@ -285,9 +305,7 @@ public with sharing class JUJ080Controller {
                 throw error(E_JIGYO_NOT_FOUND);
             }
             // ② 一括割当実行中の場合はエラー
-            if (isBulkAssigning(jigyo.Id)) {
-                throw error(E_BULK_ASSIGNING);
-            }
+            checkBulkAssigning(jigyo.Id);
             // ③ 従事者を取得する
             JujishaInfo jujisha = findJujisha(jujishaNo);
             if (jujisha == null) {
@@ -298,6 +316,8 @@ public with sharing class JUJ080Controller {
             if (app == null) {
                 throw error(E_APPLICATION_NOT_FOUND);
             }
+            // 他のユーザにより更新されている場合はエラー（共通の排他チェック）
+            checkUpdated(app.Id, systemModstamp);
             // ⑤ 割当（仮割当を含む）が存在する場合はエラー
             if (hasAssignment(jigyo.Id, new List<従事事業応募__c>{ app })) {
                 throw error(E_ASSIGNED);
@@ -319,9 +339,7 @@ public with sharing class JUJ080Controller {
                 throw error(E_JIGYO_NOT_FOUND);
             }
             // ② 一括割当実行中の場合はエラー
-            if (isBulkAssigning(jigyo.Id)) {
-                throw error(E_BULK_ASSIGNING);
-            }
+            checkBulkAssigning(jigyo.Id);
             // ③ 従事事業応募を取得する。1件もない場合はエラー
             List<従事事業応募__c> apps = [
                 SELECT Id, 会員__c, 相談員__c
@@ -481,7 +499,7 @@ public with sharing class JUJ080Controller {
         List<String> fields = new List<String>{
             'Id',
             '受付番号__c',
-            'LastModifiedDate',
+            'SystemModstamp',
             '会員__c',
             '会員__r.登録番号__c',
             '相談員__c',
@@ -602,7 +620,7 @@ public with sharing class JUJ080Controller {
         ApplicationInfo info = new ApplicationInfo();
         info.applicationId = app.Id;
         info.uketukeNo = app.受付番号__c;
-        info.lastModifiedDate = app.LastModifiedDate; // 7.(3)③c の更新確認に使用
+        info.systemModstamp = app.SystemModstamp; // 7.(3)③c・8.(2) の排他チェックに使用
         info.form = form;
         info.kanoubiDates = new List<KanoubiDate>();
         for (従事事業応募明細__c detail : app.従事事業応募明細__r) {
@@ -668,9 +686,16 @@ public with sharing class JUJ080Controller {
         return [SELECT COUNT() FROM 従事事業明細__c WHERE 従事事業__c = :jigyoId WITH USER_MODE] > 0;
     }
 
-    // 【要確認 QA-15】一括割当実行中か。割当担当の回答までは常に false
-    private static Boolean isBulkAssigning(Id jigyoId) {
-        return false;
+    // ==================== 共通チェック（Juj_CommonController） ====================
+    // 一括割当実行中の場合はエラー（共通側で AuraHandledException を発生させる）
+    private static void checkBulkAssigning(Id jigyoId) {
+        Juj_CommonController.checkIkkatsuExecution(jigyoId, NO_CHECK_KEYS);
+    }
+
+    // 画面表示時から他のユーザにより更新されている場合はエラー（共通側で AuraHandledException を発生させる）
+    // ※ 削除済みは検出されないため、呼出し前に応募の存在を確認すること
+    private static void checkUpdated(Id applicationId, Datetime systemModstamp) {
+        Juj_CommonController.checkOptimisticLock(new Map<Id, Datetime>{ applicationId => systemModstamp }, OBO_OBJECT_NAME);
     }
 
     // 応募の従事者に、同じ事業の割当（仮割当を含む）が存在するか（8.(2)⑤・9.(3)④）
@@ -788,7 +813,7 @@ public with sharing class JUJ080Controller {
     public class ApplicationInfo {
         public Id applicationId;
         public Decimal uketukeNo;
-        public Datetime lastModifiedDate;
+        public Datetime systemModstamp;
         public ApplicationForm form;
         public List<KanoubiDate> kanoubiDates;
     }
@@ -833,7 +858,7 @@ public with sharing class JUJ080Controller {
         public JigyoKey jigyoKey;
         public String jujishaNo;
         public Id applicationId;
-        public Datetime lastModifiedDate;
+        public Datetime systemModstamp;
         public ApplicationForm form;
         public List<KanoubiDate> kanoubiDates;
     }

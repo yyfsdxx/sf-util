@@ -12,12 +12,13 @@
  */
 import { LightningElement, api, wire } from 'lwc';
 import { getObjectInfos } from 'lightning/uiObjectInfoApi';
+// 共通：汎用マスタの対象年度（取得できない場合は ''）
+import getHanyouMasterTaisyoNendo from '@salesforce/apex/Juj_CommonController.getHanyouMasterTaisyoNendo';
 
 // ========== Apex（未デプロイのため一時的にコメントアウト。デプロイ後は import を戻し、下のスタブを削除する）==========
 // import search from '@salesforce/apex/JUJ082Controller.search';
 // import getJigyo from '@salesforce/apex/JUJ082Controller.getJigyo';
 // import getName from '@salesforce/apex/JUJ082Controller.getName';
-// import getDefaultNendo from '@salesforce/apex/JUJ082Controller.getDefaultNendo';
 
 // 【要確認 QA-20】メッセージ文言・ID
 const MSG = {
@@ -119,7 +120,6 @@ const getJigyo = async ({ jujiJigyoNo, jujiBasyoNo, jisiNendo }) => ({
             : null
 });
 const getName = async ({ code }) => (code && code !== '9999999' ? `テスト名称${code}` : null);
-const getDefaultNendo = async () => '2026';
 // ========== スタブ ここまで ==========
 
 export default class Juj082 extends LightningElement {
@@ -178,7 +178,7 @@ export default class Juj082 extends LightningElement {
 
     async setDefaultNendo() {
         try {
-            const nendo = await getDefaultNendo();
+            const nendo = await getHanyouMasterTaisyoNendo(); // 取得できない場合（''）は設定しない
             if (nendo) {
                 this.key = { ...this.key, jisiNendo: nendo };
                 await this.onKeyChanged();

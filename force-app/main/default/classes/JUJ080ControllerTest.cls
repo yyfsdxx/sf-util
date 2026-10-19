@@ -138,7 +138,7 @@ private class JUJ080ControllerTest {
             従事可能日__c = Date.newInstance(2026, 11, 1),
             時間帯__c = '[{"startTime":"13:00","endTime":"15:00","unused":"x"}]' // 使用しない項目は無視される
         );
-        return [SELECT Id, LastModifiedDate, 受付番号__c FROM 従事事業応募__c WHERE Id = :app.Id];
+        return [SELECT Id, SystemModstamp, 受付番号__c FROM 従事事業応募__c WHERE Id = :app.Id];
     }
 
     // ==================== parseTimeSlots ====================
@@ -268,7 +268,7 @@ private class JUJ080ControllerTest {
         Assert.areEqual(NENDO, get(r, 'jigyoKey.jisiNendo'));
         Assert.areEqual(MEMBER_NO, get(r, 'jujishaNo'));
         Assert.areEqual(String.valueOf(app.Id), get(r, 'application.applicationId'));
-        Assert.isNotNull(get(r, 'application.lastModifiedDate'));
+        Assert.isNotNull(get(r, 'application.systemModstamp'));
     }
 
     @IsTest
@@ -358,7 +358,7 @@ private class JUJ080ControllerTest {
         従事事業応募__c app = createMemberApplication(0);
         JUJ080Controller.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
-        req.lastModifiedDate = app.LastModifiedDate;
+        req.systemModstamp = app.SystemModstamp;
         req.kanoubiDates = new List<JUJ080Controller.KanoubiDate>{ kanoubi('2026-11-15', '10:00', '11:00') };
 
         Map<String, Object> r = save(req);
@@ -375,7 +375,7 @@ private class JUJ080ControllerTest {
         従事事業応募__c app = createMemberApplication(5);
         JUJ080Controller.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
-        req.lastModifiedDate = app.LastModifiedDate;
+        req.systemModstamp = app.SystemModstamp;
 
         Map<String, Object> r = save(req);
         Assert.isNull(get(r, 'uketukeNo'));
@@ -387,7 +387,7 @@ private class JUJ080ControllerTest {
         従事事業応募__c app = createMemberApplication(1);
         JUJ080Controller.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
-        req.lastModifiedDate = app.LastModifiedDate;
+        req.systemModstamp = app.SystemModstamp;
         delete app;
         try {
             save(req);
@@ -402,12 +402,29 @@ private class JUJ080ControllerTest {
         従事事業応募__c app = createMemberApplication(1);
         JUJ080Controller.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
-        req.lastModifiedDate = app.LastModifiedDate.addSeconds(-1);
+        req.systemModstamp = app.SystemModstamp.addSeconds(-1);
         try {
             save(req);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
-            Assert.areEqual(JUJ080Controller.E_UPDATED[1], e.getMessage());
+            // 共通の排他チェックによるエラー（メッセージは共通側で定義）
+            Assert.isNotNull(e);
+        }
+    }
+
+    @IsTest
+    static void checkSave_正常() {
+        JUJ080Controller.checkSave(JIGYO_NO, BASYO_NO, NENDO);
+        Assert.isTrue(true, '例外が発生しないこと');
+    }
+
+    @IsTest
+    static void checkSave_事業なしはエラー() {
+        try {
+            JUJ080Controller.checkSave(WRONG_JIGYO_NO, BASYO_NO, NENDO);
+            Assert.fail('例外が発生すること');
+        } catch (AuraHandledException e) {
+            Assert.areEqual(JUJ080Controller.E_JIGYO_NOT_FOUND[1], e.getMessage());
         }
     }
 
@@ -436,15 +453,15 @@ private class JUJ080ControllerTest {
     // ==================== deleteApplication ====================
     @IsTest
     static void deleteApplication_削除できる() {
-        createMemberApplication(1);
-        JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+        従事事業応募__c app = createMemberApplication(1);
+        JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, app.SystemModstamp);
         Assert.areEqual(0, [SELECT COUNT() FROM 従事事業応募__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM 従事事業応募明細__c], '明細も削除されること');
     }
 
     @IsTest
     static void deleteApplication_割当ありはエラー() {
-        createMemberApplication(1);
+        従事事業応募__c app = createMemberApplication(1);
         // 仮割当（割当フラグ＝1）
         insert new 従事事業割当__c(
             従事事業__c = jigyo().Id,
@@ -453,7 +470,7 @@ private class JUJ080ControllerTest {
             割当フラグ__c = JUJ080Controller.FLAG_ON
         );
         try {
-            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, app.SystemModstamp);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_ASSIGNED[1], e.getMessage());
@@ -462,9 +479,22 @@ private class JUJ080ControllerTest {
     }
 
     @IsTest
+    static void deleteApplication_更新済みはエラー() {
+        従事事業応募__c app = createMemberApplication(1);
+        try {
+            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, app.SystemModstamp.addSeconds(-1));
+            Assert.fail('例外が発生すること');
+        } catch (AuraHandledException e) {
+            // 共通の排他チェックによるエラー（メッセージは共通側で定義）
+            Assert.isNotNull(e);
+        }
+        Assert.areEqual(1, [SELECT COUNT() FROM 従事事業応募__c], '削除されないこと');
+    }
+
+    @IsTest
     static void deleteApplication_応募なしはエラー() {
         try {
-            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, null);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_APPLICATION_NOT_FOUND[1], e.getMessage());
@@ -474,7 +504,7 @@ private class JUJ080ControllerTest {
     @IsTest
     static void deleteApplication_事業なしはエラー() {
         try {
-            JUJ080Controller.deleteApplication(WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+            JUJ080Controller.deleteApplication(WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, null);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_JIGYO_NOT_FOUND[1], e.getMessage());
@@ -484,7 +514,7 @@ private class JUJ080ControllerTest {
     @IsTest
     static void deleteApplication_従事者なしはエラー() {
         try {
-            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, '0000000');
+            JUJ080Controller.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, '0000000', null);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_JUJISHA_NOT_FOUND[1], e.getMessage());

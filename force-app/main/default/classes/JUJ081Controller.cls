@@ -6,6 +6,7 @@
  * ※ オブジェクト名・項目名は論理名で記載している（API 名確定後に一括置換する）。
  * ※ SOQL はすべてユーザモードで実行し、支部の条件は付けない。
  * ※ 画面から受け取った Id は使用せず、従事事業キー・番号から都度取得する。
+ * ※ 一括割当実行中チェックは共通（Juj_CommonController）を呼び出す（エラー時は共通側で AuraHandledException を発生させる）。
  * ※ LWC から呼び出すメソッドは内部クラスを引数・戻り値に使用できないため、
  *   引数は基本型、戻り値は Map／List<Map> とする。
  */
@@ -17,10 +18,11 @@ public with sharing class JUJ081Controller {
     private static final List<String> E_JIGYO_NOT_FOUND = new List<String>{ 'JUJ081-E001', '従事事業が存在しません。' };
     @TestVisible
     private static final List<String> E_JUJISHA_NOT_FOUND = new List<String>{ 'WLP007-0009', '従事者が存在しません。' };
-    @TestVisible
-    private static final List<String> E_BULK_ASSIGNING = new List<String>{ 'WLP009-0008', '一括割当実行中のため処理できません。' };
 
     private static final String TIME_FORMAT = 'HH:mm';
+
+    // 一括割当チェック（共通）の checkKeys（現在は未使用のため空）
+    private static final Set<String> NO_CHECK_KEYS = new Set<String>();
 
     // 割当のフラグ項目（割当フラグ・確定フラグ）は選択リスト。値 '1' で ON（仮割当・確定）
     @TestVisible
@@ -142,9 +144,7 @@ public with sharing class JUJ081Controller {
             if (jigyo == null) {
                 throw error(E_JIGYO_NOT_FOUND);
             }
-            if (isBulkAssigning(jigyo.Id)) {
-                throw error(E_BULK_ASSIGNING);
-            }
+            Juj_CommonController.checkIkkatsuExecution(jigyo.Id, NO_CHECK_KEYS);
         } catch (JujiOboException e) {
             throw toAuraException(e);
         }
@@ -262,13 +262,6 @@ public with sharing class JUJ081Controller {
             result.get(rec.従事日__c).add(a);
         }
         return result;
-    }
-
-    // ==================== Gateway ====================
-    // 【要確認 QA-15】一括割当実行中か。共通チェック提供までは常に false
-    @TestVisible
-    private static Boolean isBulkAssigning(Id jigyoId) {
-        return false;
     }
 
     // ==================== 変換 ====================

@@ -34,8 +34,6 @@ private class JUJ082ControllerTest {
         insert new List<Contact>{ m1, m2 };
         相談員__c s1 = new 相談員__c(相談員番号__c = '9000001', 氏名__c = '山田 一郎');
         insert s1;
-        // 【要確認】汎用マスタの対象年度
-        insert new Hanyou_Master__c(対象年度__c = '2026');
 
         insert new List<従事事業応募__c>{
             new 従事事業応募__c(従事事業__c = jigyo.Id, 会員__c = m1.Id, 受付番号__c = 2),
@@ -146,12 +144,7 @@ private class JUJ082ControllerTest {
         Assert.areEqual('a\\%b\\_c\\\\d', JUJ082Controller.escapeLike('a%b_c\\d'));
     }
 
-    // ==================== 実施年度の初期値・事業の取得・名称の取得 ====================
-    @IsTest
-    static void getDefaultNendo_汎用マスタの対象年度() {
-        Assert.areEqual('2026', JUJ082Controller.getDefaultNendo());
-    }
-
+    // ==================== 事業の取得・名称の取得 ====================
     @IsTest
     static void getJigyo_事業と場所名を取得() {
         Map<String, Object> r = JUJ082Controller.getJigyo(JIGYO_NO, BASYO_NO, NENDO);

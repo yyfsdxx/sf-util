@@ -26,21 +26,6 @@ public with sharing class JUJ082Controller {
     @TestVisible
     private static final List<String> E_RANGE = new List<String>{ 'SYSTEM-5104', '範囲指定が正しくありません。' };
 
-    // ==================== 初期表示：実施年度の初期値 ====================
-    // 戻り値：汎用マスタの対象年度（取得できない場合は null）
-    @AuraEnabled
-    public static String getDefaultNendo() {
-        // 【要確認】汎用マスタの抽出条件（対象年度を保持するレコードの特定方法）
-        List<Hanyou_Master__c> recs = [
-            SELECT 対象年度__c
-            FROM Hanyou_Master__c
-            WHERE 対象年度__c != null
-            WITH USER_MODE
-            LIMIT 1
-        ];
-        return recs.isEmpty() ? null : recs[0].対象年度__c;
-    }
-
     // ==================== 従事事業キー変更時：事業の取得 ====================
     // 戻り値：{ basyoName, jigyo: { jigyoName, shibuCode, shibuName } | null }
     @AuraEnabled

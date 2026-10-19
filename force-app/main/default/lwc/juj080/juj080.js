@@ -20,6 +20,7 @@ import { getObjectInfos } from 'lightning/uiObjectInfoApi';
 // import showApplication from '@salesforce/apex/JUJ080Controller.showApplication';
 // import getApplication from '@salesforce/apex/JUJ080Controller.getApplication';
 // import checkKanoubiInput from '@salesforce/apex/JUJ080Controller.checkKanoubiInput';
+// import checkSave from '@salesforce/apex/JUJ080Controller.checkSave';
 // import saveApplication from '@salesforce/apex/JUJ080Controller.saveApplication';
 // import deleteApplication from '@salesforce/apex/JUJ080Controller.deleteApplication';
 // import deleteAllApplications from '@salesforce/apex/JUJ080Controller.deleteAllApplications';
@@ -151,7 +152,7 @@ const STUB_JUJISHA = (jujishaNo) => ({
 const STUB_APPLICATION = {
     applicationId: 'a00000000000001AAA',
     uketukeNo: 1,
-    lastModifiedDate: '2026-10-13T00:00:00.000Z',
+    systemModstamp: '2026-10-13T00:00:00.000Z',
     form: {
         telFixed: '03-1111-1111',
         mail: 'test@example.com',
@@ -202,6 +203,7 @@ const getApplication = async () => ({
     application: STUB_APPLICATION
 });
 const checkKanoubiInput = async () => {};
+const checkSave = async () => {};
 const saveApplication = async ({ requestJson }) => {
     const req = JSON.parse(requestJson);
     if (!req.applicationId && req.jujishaNo === '1111111') {
@@ -232,7 +234,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
 
     // 応募情報部
     applicationId = null; // null＝追加モード
-    lastModifiedDate = null;
+    systemModstamp = null; // 応募のシステム更新日時（排他チェック用）
     form = emptyForm();
     kanoubiDates = []; // 保持中の従事可能日 [{ kanoubiDate: 'yyyy-MM-dd', timeSlots: [{ startTime, endTime }] }]
 
@@ -558,6 +560,13 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         if (!this.showErrorMessages(errors, isValid)) {
             return;
         }
+        // (1) ④ 一括割当実行中（サーバ側でチェック。登録処理内でも再チェックする）
+        try {
+            await checkSave({ ...this.jigyoKey });
+        } catch (error) {
+            this.showError(error);
+            return;
+        }
         // (2) 登録確認
         if (!(await this.confirmDialog(MSG.CONFIRM_SAVE))) {
             return;
@@ -571,7 +580,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
                     jigyoKey: this.jigyoKey,
                     jujishaNo: this.jujishaNo,
                     applicationId: this.applicationId,
-                    lastModifiedDate: this.lastModifiedDate,
+                    systemModstamp: this.systemModstamp,
                     form: this.form,
                     kanoubiDates: this.kanoubiDates
                 })
@@ -599,8 +608,8 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
         this.isLoading = true;
         try {
-            // (2) 削除処理
-            await deleteApplication({ ...this.jigyoKey, jujishaNo: this.jujishaNo });
+            // (2) 削除処理（画面表示時のシステム更新日時を渡し、排他チェックを行う）
+            await deleteApplication({ ...this.jigyoKey, jujishaNo: this.jujishaNo, systemModstamp: this.systemModstamp });
             // (3) 画面反映
             this.resetJujishaAndApplication();
             this.showSuccess(MSG.DELETED);
@@ -684,10 +693,10 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     // ========== 11. 共通処理 ==========
-    // 11.(1) 応募情報の読込（② 表示 ③ 最終更新日時を保持 → 変更モード）
+    // 11.(1) 応募情報の読込（② 表示 ③ システム更新日時を保持 → 変更モード）
     applyApplication(app) {
         this.applicationId = app.applicationId;
-        this.lastModifiedDate = app.lastModifiedDate;
+        this.systemModstamp = app.systemModstamp;
         this.uketukeNo = app.uketukeNo;
         this.form = { ...emptyForm(), ...app.form };
         this.kanoubiDates = app.kanoubiDates || [];
@@ -793,7 +802,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     // 追加モード：保持している応募IDを破棄する
     toAddMode() {
         this.applicationId = null;
-        this.lastModifiedDate = null;
+        this.systemModstamp = null;
     }
 
     isSameJigyoKey(a, b) {
