@@ -5,7 +5,6 @@
  * ※ オブジェクト名・項目名は論理名で記載している（API 名確定後に一括置換する）。
  * ※ 従事事業応募は従事事業の主従子オブジェクトのため、参照範囲は従事事業に従う。
  *   SOQL・DML はすべてユーザモードで実行し、支部の条件は付けない。
- * ※ 他担当の設計に依存する部分（事業の入力フラグ）は「Gateway」区画のスタブで実装している。
  * ※ 一括割当実行中チェック・排他チェックは共通（Juj_CommonController）を呼び出す。
  *   エラー時は共通側で AuraHandledException が発生し、そのまま画面へ返す（トランザクションはロールバックされる）。
  * ※ 業務エラーは JujiOboException で発生させ、各メソッドの入口で AuraHandledException に変換する。
@@ -78,6 +77,12 @@ public with sharing class JUJ080Controller {
     // 割当のフラグ項目（割当フラグ・確定フラグ）は選択リスト。値 '1' で ON（仮割当・確定）
     @TestVisible
     private static final String FLAG_ON = '1';
+
+    // 事業の必須入力フラグ・任意入力フラグ（選択リスト）の値
+    @TestVisible
+    private static final String REQUIRED_ON = '必須'; // 必須入力フラグ：必須（ほかに「省略可」）
+    @TestVisible
+    private static final String OPTIONAL_OFF = '禁止'; // 任意入力フラグ：禁止（ほかに「許可」）
 
     // 共通チェックの引数
     private static final String OBO_OBJECT_NAME = '従事事業応募__c'; // 排他チェック対象のオブジェクト API 名
@@ -381,7 +386,9 @@ public with sharing class JUJ080Controller {
             return null;
         }
         String soql =
-            'SELECT Id, 従事事業名__c, 支部__r.支部コード__c, 支部__r.Name' +
+            'SELECT Id, 従事事業名__c, 支部__r.支部コード__c, 支部__r.Name,' +
+            ' 必須入力フラグ_従事可能曜日__c, 必須入力フラグ_従事可能日__c, 必須入力フラグ_希望従事日数__c, 必須入力フラグ_スキル__c,' +
+            ' 任意入力フラグ_スキル__c, 任意入力フラグ_スキル特記事項__c, 任意入力フラグ_主な著書論文__c, 任意入力フラグ_相談科目__c' +
             ' FROM 従事事業__c' +
             ' WHERE 従事事業No__c = :jigyoNo' +
             ' AND 従事場所__r.従事場所No__c = :basyoNo' +
@@ -666,18 +673,21 @@ public with sharing class JUJ080Controller {
         rec.相談科目__c = form.sodanKamoku;
     }
 
-    // ==================== Gateway（他担当の設計に依存する部分） ====================
-    // 【要確認 QA-16】事業の必須／任意入力フラグ。項目確定までは「必須なし・すべて入力可」として返す
+    // ==================== 事業設定による入力制御 ====================
+    // 事業の必須入力フラグ（必須／省略可）・任意入力フラグ（許可／禁止）を画面の入力制御に変換する
+    // ※ 未設定（空白）の場合は制限しない（必須入力フラグは「省略可」、任意入力フラグは「許可」として扱う）
     private static InputControl getInputControl(従事事業__c jigyo) {
         InputControl ctrl = new InputControl();
-        ctrl.requiredWeekday = false;
-        ctrl.requiredKanoubi = false;
-        ctrl.requiredKibouNissu = false;
-        ctrl.requiredSkill = false;
-        ctrl.optionalSkill = true;
-        ctrl.optionalSkillNote = true;
-        ctrl.optionalChosho = true;
-        ctrl.optionalSodanKamoku = true;
+        // 必須入力フラグ：「必須」の場合のみ true
+        ctrl.requiredWeekday = jigyo.必須入力フラグ_従事可能曜日__c == REQUIRED_ON;
+        ctrl.requiredKanoubi = jigyo.必須入力フラグ_従事可能日__c == REQUIRED_ON;
+        ctrl.requiredKibouNissu = jigyo.必須入力フラグ_希望従事日数__c == REQUIRED_ON;
+        ctrl.requiredSkill = jigyo.必須入力フラグ_スキル__c == REQUIRED_ON;
+        // 任意入力フラグ：「禁止」以外（許可・空白）の場合は true
+        ctrl.optionalSkill = jigyo.任意入力フラグ_スキル__c != OPTIONAL_OFF;
+        ctrl.optionalSkillNote = jigyo.任意入力フラグ_スキル特記事項__c != OPTIONAL_OFF;
+        ctrl.optionalChosho = jigyo.任意入力フラグ_主な著書論文__c != OPTIONAL_OFF;
+        ctrl.optionalSodanKamoku = jigyo.任意入力フラグ_相談科目__c != OPTIONAL_OFF;
         return ctrl;
     }
 

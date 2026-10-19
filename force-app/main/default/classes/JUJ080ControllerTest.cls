@@ -168,7 +168,39 @@ private class JUJ080ControllerTest {
         Assert.areEqual('001', get(r, 'jigyo.shibuCode'));
         Assert.areEqual('テスト支部', get(r, 'jigyo.shibuName'));
         Assert.areEqual(5, num(r, 'jigyo.lastUketukeNo'));
-        Assert.isNotNull(get(r, 'jigyo.inputControl'));
+        // 入力フラグが未設定の場合は制限しない（必須なし・すべて入力可）
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.requiredWeekday'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.requiredKanoubi'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.requiredKibouNissu'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.requiredSkill'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.optionalSkill'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.optionalSkillNote'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.optionalChosho'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.optionalSodanKamoku'));
+    }
+
+    @IsTest
+    static void getJigyo_入力フラグによる入力制御() {
+        従事事業__c j = jigyo();
+        j.必須入力フラグ_従事可能曜日__c = JUJ080Controller.REQUIRED_ON;
+        j.必須入力フラグ_従事可能日__c = '省略可';
+        j.必須入力フラグ_希望従事日数__c = JUJ080Controller.REQUIRED_ON;
+        j.必須入力フラグ_スキル__c = JUJ080Controller.REQUIRED_ON;
+        j.任意入力フラグ_スキル__c = JUJ080Controller.OPTIONAL_OFF;
+        j.任意入力フラグ_スキル特記事項__c = '許可';
+        j.任意入力フラグ_主な著書論文__c = JUJ080Controller.OPTIONAL_OFF;
+        j.任意入力フラグ_相談科目__c = JUJ080Controller.OPTIONAL_OFF;
+        update j;
+
+        Map<String, Object> r = JUJ080Controller.getJigyo(JIGYO_NO, BASYO_NO, NENDO);
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.requiredWeekday'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.requiredKanoubi'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.requiredKibouNissu'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.requiredSkill'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.optionalSkill'));
+        Assert.areEqual(true, get(r, 'jigyo.inputControl.optionalSkillNote'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.optionalChosho'));
+        Assert.areEqual(false, get(r, 'jigyo.inputControl.optionalSodanKamoku'));
     }
 
     @IsTest
