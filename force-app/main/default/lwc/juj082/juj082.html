@@ -1,0 +1,551 @@
+<template>
+    <!-- モーダル全体（中サイズを指定） -->
+    <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_medium">
+        <div class="slds-modal__container">
+            <!-- モーダルヘッダー -->
+            <header class="slds-modal__header" style="background-color: #f3f3f3">
+                <button
+                    class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                    title="閉じる"
+                    onclick={closeSearchModal}
+                >
+                    <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                    <span class="slds-assistive-text">閉じる</span>
+                </button>
+                <h3 class="slds-text-heading_medium slds-hyphenate" style="font-weight: bold">応募情報検索</h3>
+            </header>
+
+            <!-- モーダルボディ -->
+            <div class="slds-modal__content slds-p-around_medium">
+                <template if:true={isLoading}>
+                    <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+                </template>
+
+                <!-- エラーメッセージ（複数項目の関連チェック・業務チェック・サーバエラー） -->
+                <template if:true={hasHeaderMessages}>
+                    <div class="slds-text-color_error slds-m-bottom_medium slds-p-left_medium">
+                        <ul class="slds-list_dotted">
+                            <template for:each={headerMessages} for:item="msg">
+                                <li key={msg}>{msg}</li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+
+                <!-- 検索条件セクション -->
+                <div class="slds-section slds-is-open">
+                    <h3
+                        class="slds-section__title"
+                        style="background-color: #e8f2fc; color: #080707; border-radius: 0.25rem"
+                    >
+                        <span class="slds-truncate slds-p-horizontal_small" title="検索条件">検索条件</span>
+                    </h3>
+
+                    <!-- 検索条件入力エリア -->
+                    <div class="slds-section__content slds-p-around_small border-box">
+                        <!-- 1行目: 従事事業No. -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.jujiJigyoNo}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <div class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small">
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            value={key.jujiJigyoNo}
+                                            data-field="jujiJigyoNo"
+                                            onblur={handleKeyBlur}
+                                            disabled={isInputDisabled}
+                                        ></lightning-input>
+                                    </div>
+                                    <template if:true={isSearchButtonVisible}>
+                                        <div class="slds-col slds-grow-none">
+                                            <lightning-button
+                                                label="検索"
+                                                data-screen="JUJ110"
+                                                onclick={handleSubSearchClick}
+                                            ></lightning-button>
+                                        </div>
+                                    </template>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {currentJigyo.jigyoName}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2行目: 支部コード -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.shibuCode}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <div class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small">
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {currentJigyo.shibuCode}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {currentJigyo.shibuName}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3行目: 従事場所No. -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">従事場所No.</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <div class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small">
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            value={key.jujiBasyoNo}
+                                            data-field="jujiBasyoNo"
+                                            onblur={handleKeyBlur}
+                                            disabled={isInputDisabled}
+                                        ></lightning-input>
+                                    </div>
+                                    <template if:true={isSearchButtonVisible}>
+                                        <div class="slds-col slds-grow-none">
+                                            <lightning-button
+                                                label="検索"
+                                                data-screen="JUJ120"
+                                                onclick={handleSubSearchClick}
+                                            ></lightning-button>
+                                        </div>
+                                    </template>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {currentBasyoName}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4行目: 実施年度 -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.jisiNendo}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <div class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small">
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            value={key.jisiNendo}
+                                            data-field="jisiNendo"
+                                            onblur={handleKeyBlur}
+                                            disabled={isInputDisabled}
+                                        ></lightning-input>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5行目: 受付番号 -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.uketukeNo}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <div class="slds-col slds-size_5-of-12">
+                                    <lightning-input
+                                        type="text"
+                                        variant="label-hidden"
+                                        placeholder="半角英数"
+                                        value={condition.uketukeNoFrom}
+                                        data-field="uketukeNoFrom"
+                                        onchange={handleConditionChange}
+                                    ></lightning-input>
+                                </div>
+                                <div class="slds-col slds-grow-none slds-p-horizontal_small">～</div>
+                                <div class="slds-col slds-size_5-of-12">
+                                    <lightning-input
+                                        type="text"
+                                        variant="label-hidden"
+                                        placeholder="半角英数"
+                                        value={condition.uketukeNoTo}
+                                        data-field="uketukeNoTo"
+                                        onchange={handleConditionChange}
+                                    ></lightning-input>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6行目: 登録番号 -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.torokuNo}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <!-- From側 -->
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_5-of-12"
+                                >
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="半角数字"
+                                            value={condition.torokuNoFrom}
+                                            data-field="torokuNoFrom"
+                                            onchange={handleConditionChange}
+                                            onblur={handleNoBlur}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ140"
+                                            onclick={handleSubSearchClick}
+                                        ></lightning-button>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {names.torokuNoFrom}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="slds-col slds-grow-none slds-p-horizontal_small">～</div>
+
+                                <!-- To側 -->
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_5-of-12"
+                                >
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="半角数字"
+                                            value={condition.torokuNoTo}
+                                            data-field="torokuNoTo"
+                                            onchange={handleConditionChange}
+                                            onblur={handleNoBlur}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ140"
+                                            onclick={handleSubSearchClick}
+                                        ></lightning-button>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {names.torokuNoTo}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7行目: 支部コード（検索用） -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.shibuCode}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <!-- From側 -->
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_5-of-12"
+                                >
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="半角数字"
+                                            value={condition.shibuCodeFrom}
+                                            data-field="shibuCodeFrom"
+                                            onchange={handleConditionChange}
+                                            onblur={handleNoBlur}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ130"
+                                            onclick={handleSubSearchClick}
+                                        ></lightning-button>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {names.shibuCodeFrom}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="slds-col slds-grow-none slds-p-horizontal_small">～</div>
+
+                                <!-- To側 -->
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_5-of-12"
+                                >
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="半角数字"
+                                            value={condition.shibuCodeTo}
+                                            data-field="shibuCodeTo"
+                                            onchange={handleConditionChange}
+                                            onblur={handleNoBlur}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ130"
+                                            onclick={handleSubSearchClick}
+                                        ></lightning-button>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {names.shibuCodeTo}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 8行目: 相談員番号 -->
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.sodaninNo}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <!-- From側 -->
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_5-of-12"
+                                >
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="半角数字"
+                                            value={condition.sodaninNoFrom}
+                                            data-field="sodaninNoFrom"
+                                            onchange={handleConditionChange}
+                                            onblur={handleNoBlur}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ150"
+                                            onclick={handleSubSearchClick}
+                                        ></lightning-button>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {names.sodaninNoFrom}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="slds-col slds-grow-none slds-p-horizontal_small">～</div>
+
+                                <!-- To側 -->
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_5-of-12"
+                                >
+                                    <div class="slds-col slds-size_4-of-12">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="半角数字"
+                                            value={condition.sodaninNoTo}
+                                            data-field="sodaninNoTo"
+                                            onchange={handleConditionChange}
+                                            onblur={handleNoBlur}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ150"
+                                            onclick={handleSubSearchClick}
+                                        ></lightning-button>
+                                    </div>
+                                    <div class="slds-col">
+                                        <div
+                                            style="
+                                                height: 32px;
+                                                display: flex;
+                                                align-items: center;
+                                                border-bottom: 1px solid #dddbda;
+                                            "
+                                        >
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">
+                                                {names.sodaninNoTo}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 9行目: 氏名 -->
+                        <div class="slds-form-element slds-m-bottom_medium">
+                            <label class="slds-form-element__label">{labels.name}</label>
+                            <div class="slds-form-element__control slds-grid slds-vertical-align-center">
+                                <div
+                                    class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small slds-size_8-of-12"
+                                >
+                                    <div class="slds-col">
+                                        <lightning-input
+                                            type="text"
+                                            variant="label-hidden"
+                                            placeholder="全角"
+                                            value={condition.name}
+                                            data-field="name"
+                                            onchange={handleConditionChange}
+                                        ></lightning-input>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 検索実行ボタン -->
+                        <div class="slds-grid slds-grid_align-end slds-m-top_small">
+                            <lightning-button
+                                variant="brand-outline"
+                                label="検索"
+                                onclick={handleSearchAction}
+                            ></lightning-button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 検索結果セクション -->
+                <div class="slds-section slds-is-open">
+                    <h3
+                        class="slds-section__title"
+                        style="background-color: #e8f2fc; color: #080707; border-radius: 0.25rem"
+                    >
+                        <span class="slds-truncate slds-p-horizontal_small" title="検索結果">検索結果</span>
+                    </h3>
+                    <div class="slds-section__content slds-p-top_small" style="width: 100%; background-color: #ffffff">
+                        <div style="height: 300px">
+                            <lightning-datatable
+                                key-field="applicationId"
+                                data={searchData}
+                                columns={columns}
+                                hide-checkbox-column
+                                onsort={handleSort}
+                                sorted-by={sortBy}
+                                sorted-direction={sortDirection}
+                                onrowaction={handleRowAction}
+                                class="slds-theme_default"
+                            >
+                            </lightning-datatable>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- モーダルフッター -->
+            <footer class="slds-modal__footer slds-grid slds-grid_align-end">
+                <!-- クリアボタン -->
+                <div style="width: 100px" class="slds-m-right_x-small">
+                    <lightning-button
+                        variant="neutral"
+                        label="クリア"
+                        onclick={handleClearSearch}
+                        stretch
+                    ></lightning-button>
+                </div>
+                <!-- 閉じるボタン -->
+                <div style="width: 100px">
+                    <lightning-button
+                        variant="brand"
+                        label="閉じる"
+                        onclick={closeSearchModal}
+                        stretch
+                    ></lightning-button>
+                </div>
+            </footer>
+        </div>
+    </section>
+
+    <!-- モーダルの背景 -->
+    <div class="slds-backdrop slds-backdrop_open"></div>
+</template>

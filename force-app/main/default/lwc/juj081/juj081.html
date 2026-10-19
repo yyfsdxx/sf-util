@@ -1,0 +1,510 @@
+<template>
+    <!-- モーダル全体（大サイズを指定してテーブルがはみ出さないようにする） -->
+    <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_medium">
+        <div class="slds-modal__container">
+            <!-- モーダルヘッダー -->
+            <header class="slds-modal__header" style="background-color: #f3f3f3">
+                <button
+                    class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                    title="閉じる"
+                    onclick={handleClose}
+                >
+                    <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                    <span class="slds-assistive-text">閉じる</span>
+                </button>
+                <h3 class="slds-text-heading_medium slds-hyphenate" style="font-weight: bold">従事可能日指定</h3>
+            </header>
+
+            <!-- モーダルボディ -->
+            <div class="slds-modal__content slds-p-around_medium">
+                <template if:true={isLoading}>
+                    <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+                </template>
+
+                <!-- エラーメッセージ（業務チェック・サーバエラー） -->
+                <template if:true={hasHeaderMessages}>
+                    <div class="slds-text-color_error slds-m-bottom_medium slds-p-left_medium">
+                        <ul class="slds-list_dotted">
+                            <template for:each={headerMessages} for:item="msg">
+                                <li key={msg}>{msg}</li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+
+                <!-- 検索条件などのヘッダー情報エリア（図2の2カラムレイアウトに修正） -->
+                <div class="slds-p-horizontal_small">
+                    <!-- 1行目: 従事事業No. / 従事事業名 -->
+                    <div class="slds-grid slds-gutters">
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">{labels.jujiJigyoNo}</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.jujiJigyoNo}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">{labels.jigyoName}</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.jujiJigyoMei}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2行目: 支部コード / 支部名 -->
+                    <div class="slds-grid slds-gutters">
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">{labels.shibuCode}</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.shibuCode}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">支部名</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.shibuMei}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3行目: 従事場所No. / 従事場所名 -->
+                    <div class="slds-grid slds-gutters">
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">従事場所No.</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.jujiBashoNo}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">従事場所名</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.jujiBashoMei}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4行目: 実施年度 / (空) -->
+                    <div class="slds-grid slds-gutters">
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">{labels.jisiNendo}</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.jisshiNendo}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="slds-col slds-size_1-of-2">
+                            <!-- レイアウト維持のための空カラム -->
+                        </div>
+                    </div>
+                    <!-- 5行目: 登録番号 -->
+                    <div class="slds-grid slds-gutters">
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">登録番号/相談員番号</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.jujishaNo}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="slds-col slds-size_1-of-2">
+                            <div class="slds-form-element slds-border_bottom slds-p-bottom_xxx-small">
+                                <span class="slds-form-element__label">{labels.jujishaName}</span>
+                                <div class="slds-form-element__control">
+                                    <span class="slds-form-element__static">{headerData.shiMei}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- カレンダー表示コントロールと凡例エリア -->
+                <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-vertical_small">
+                    <div style="min-width: 180px"></div>
+
+                    <div class="slds-grid slds-grid_vertical-align-center">
+                        <lightning-button
+                            label="←前２カ月"
+                            onclick={handlePrevMonth}
+                            disabled={isActionDisabled}
+                            class="slds-m-right_x-small"
+                        ></lightning-button>
+                        <lightning-combobox
+                            variant="label-hidden"
+                            value={selectedMonth}
+                            options={monthOptions}
+                            onchange={handleMonthChange}
+                            disabled={isActionDisabled}
+                            class="month-select"
+                        >
+                        </lightning-combobox>
+                        <lightning-button
+                            label="次２カ月→"
+                            onclick={handleNextMonth}
+                            disabled={isActionDisabled}
+                            class="slds-m-left_x-small"
+                        ></lightning-button>
+                    </div>
+
+                    <div style="min-width: 180px" class="slds-text-align_right">
+                        <!-- 割当と募集のインラインスタイルによる確実な色指定 -->
+                        <span
+                            class="slds-m-right_x-small"
+                            style="
+                                background-color: #eb7022;
+                                color: #ffffff;
+                                padding: 2px 8px;
+                                border-radius: 4px;
+                                font-weight: bold;
+                            "
+                            >割当</span
+                        >
+                        <span
+                            style="
+                                background-color: #0b345a;
+                                color: #ffffff;
+                                padding: 2px 8px;
+                                border-radius: 4px;
+                                font-weight: bold;
+                            "
+                            >募集</span
+                        >
+                    </div>
+                </div>
+
+                <!-- データテーブルエリア -->
+                <div class="slds-scrollable_y" style="height: 350px; width: 100%">
+                    <table
+                        class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_col-bordered custom-table"
+                    >
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <!-- 全選択マスターチェックボックス -->
+                                <th scope="col" style="width: 40px" class="slds-text-align_center">
+                                    <lightning-input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        onchange={handleMasterCheck}
+                                        disabled={isActionDisabled}
+                                    ></lightning-input>
+                                </th>
+
+                                <th scope="col" style="width: 120px" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="日付">日付</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+
+                                <th scope="col" style="width: 80px" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="曜日">曜日</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+
+                                <th scope="col" style="width: 100px" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="募集人数">募集人数</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+
+                                <th scope="col" style="width: 100px" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="割当人数">割当人数</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+
+                                <th scope="col" style="width: 130px" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="開始時間">開始時間</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+
+                                <th scope="col" style="width: 130px" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="終了時間">終了時間</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+
+                                <th scope="col" class="resizable-th">
+                                    <div class="th-content">
+                                        <span class="slds-truncate" title="備考">備考</span>
+                                        <lightning-button-menu
+                                            icon-name="utility:down"
+                                            icon-size="x-small"
+                                            variant="container"
+                                            class="th-menu"
+                                        >
+                                            <lightning-menu-item
+                                                value="wrap"
+                                                label="テキストを折り返す"
+                                                onclick={handleWrapText}
+                                            ></lightning-menu-item>
+                                            <lightning-menu-item
+                                                value="clip"
+                                                label="テキストを省略する"
+                                                onclick={handleClipText}
+                                            ></lightning-menu-item>
+                                        </lightning-button-menu>
+                                    </div>
+                                    <div class="resize-handle" onmousedown={handleMouseDown}></div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template for:each={calendarRows} for:item="row">
+                                <!-- 日付行 -->
+                                <tr key={row.id} class={row.rowClass}>
+                                    <!-- 行単位のチェックボックス（ON：その日の時間帯をすべて選択、OFF：すべて解除） -->
+                                    <td class="slds-text-align_center">
+                                        <lightning-input
+                                            type="checkbox"
+                                            checked={row.isSelected}
+                                            data-id={row.id}
+                                            onchange={handleRowCheck}
+                                            disabled={row.isDisabled}
+                                        ></lightning-input>
+                                    </td>
+                                    <td>
+                                        <div class="slds-grid slds-grid_vertical-align-center">
+                                            <!-- 時間帯行の展開・折りたたみ -->
+                                            <template if:true={row.hasSubRows}>
+                                                <lightning-button-icon
+                                                    icon-name={row.expandIcon}
+                                                    variant="bare"
+                                                    size="small"
+                                                    class="slds-m-right_xx-small expand-icon"
+                                                    data-id={row.id}
+                                                    onclick={handleToggleExpand}
+                                                ></lightning-button-icon>
+                                            </template>
+                                            <div class={textStyleClass}>{row.dayLabel}</div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div>
+                                            <span class={row.youbiClass}>{row.youbi}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class={textStyleClass}>{row.boshuNinzu}</div>
+                                    </td>
+                                    <td>
+                                        <div class={textStyleClass}>{row.wariateNinzu}</div>
+                                    </td>
+                                    <td>
+                                        <div class={textStyleClass}>{row.startTime}</div>
+                                    </td>
+                                    <td>
+                                        <div class={textStyleClass}>{row.endTime}</div>
+                                    </td>
+                                    <td>
+                                        <div class={textStyleClass} title={row.biko}>{row.biko}</div>
+                                    </td>
+                                </tr>
+
+                                <!-- 時間帯行（初期表示は折りたたみ） -->
+                                <template if:true={row.isExpanded}>
+                                    <template for:each={row.subRows} for:item="sub">
+                                        <tr key={sub.id} class={sub.rowClass}>
+                                            <td class="slds-text-align_center">
+                                                <lightning-input
+                                                    type="checkbox"
+                                                    checked={sub.isSelected}
+                                                    data-date={row.id}
+                                                    data-key={sub.key}
+                                                    onchange={handleSubRowCheck}
+                                                    disabled={sub.isDisabled}
+                                                ></lightning-input>
+                                            </td>
+                                            <td class="sub-row-label">
+                                                <span class="slds-text-color_weak">No.{sub.displayIndex}</span>
+                                            </td>
+                                            <td></td>
+                                            <td>
+                                                <div class={textStyleClass}>{sub.boshuNinzu}</div>
+                                            </td>
+                                            <td>
+                                                <div class={textStyleClass}>{sub.wariateNinzu}</div>
+                                            </td>
+                                            <td>
+                                                <div class={textStyleClass}>{sub.startTime}</div>
+                                            </td>
+                                            <td>
+                                                <div class={textStyleClass}>{sub.endTime}</div>
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </template>
+                                </template>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- モーダルフッター（アクションボタン） -->
+            <footer class="slds-modal__footer slds-grid slds-grid_align-spread">
+                <!-- 左側のボタン群 -->
+                <div class="slds-grid">
+                    <div style="width: 100px" class="slds-m-right_x-small">
+                        <lightning-button
+                            label="保存"
+                            variant="neutral"
+                            onclick={handleSave}
+                            disabled={isActionDisabled}
+                            class="slds-m-right_x-small"
+                            stretch
+                        ></lightning-button>
+                    </div>
+                    <lightning-button
+                        label="全チェックオフ"
+                        onclick={handleAllCheckOff}
+                        disabled={isActionDisabled}
+                    ></lightning-button>
+                </div>
+                <!-- 右側のボタン群 -->
+                <div class="slds-grid">
+                    <div style="width: 100px" class="slds-m-right_x-small">
+                        <lightning-button
+                            label="クリア"
+                            onclick={handleClear}
+                            disabled={isActionDisabled}
+                            class="slds-m-right_x-small"
+                            stretch
+                        ></lightning-button>
+                    </div>
+                    <div style="width: 100px" class="slds-m-right_x-small">
+                        <lightning-button
+                            label="閉じる"
+                            variant="brand"
+                            onclick={handleClose}
+                            stretch
+                        ></lightning-button>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </section>
+
+    <!-- モーダルの背景の黒いオーバーレイ -->
+    <div class="slds-backdrop slds-backdrop_open" role="presentation"></div>
+</template>

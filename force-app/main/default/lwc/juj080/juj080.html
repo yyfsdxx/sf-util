@@ -1,0 +1,370 @@
+<template>
+    <div class="slds-box slds-theme_default main-container">
+        <!-- 画面タイトル -->
+        <h1 class="slds-text-heading_medium title-header">従事事業応募登録</h1>
+        <div class="slds-border_bottom"></div>
+
+        <!-- エラーメッセージ（複数項目の関連チェック・業務チェック・サーバエラー） -->
+        <template if:true={hasHeaderMessages}>
+            <div class="slds-text-color_error slds-m-top_medium slds-p-left_medium">
+                <ul class="slds-list_dotted">
+                    <template for:each={headerMessages} for:item="msg">
+                        <li key={msg}>{msg}</li>
+                    </template>
+                </ul>
+            </div>
+        </template>
+
+        <!-- セクション1: 検索・基本情報 -->
+        <div class="slds-section slds-is-open">
+            <div class="slds-section__content">
+                <lightning-layout multiple-rows>
+                    <!-- 従事事業No. -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <template if:false={isJigyoKeyReadonly}>
+                            <div class="slds-grid slds-gutters">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">{labels.jujiJigyoNo}</label>
+                                        <div class="slds-form-element__control slds-grid slds-gutters_xx-small">
+                                            <div class="slds-col">
+                                                <lightning-input type="text" variant="label-hidden" value={jigyoKey.jujiJigyoNo} data-field="jujiJigyoNo" data-required="jigyoKey" onblur={handleJigyoKeyBlur}></lightning-input>
+                                            </div>
+                                            <div class="slds-col slds-grow-none">
+                                                <lightning-button label="検索" variant="neutral" onclick={handleJigyoSearchClick}></lightning-button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">{labels.jigyoName}</label>
+                                        <div class="slds-form-element__control" style="height: 32px; display: flex; align-items: center; border-bottom: 1px solid #dddbda;">
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">{jigyo.jigyoName}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <template if:true={isJigyoKeyReadonly}>
+                            <div class="slds-grid slds-gutters_x-small">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">{labels.jujiJigyoNo}</label>
+                                        <div class="custom-underline-output">{jigyoKey.jujiJigyoNo}</div>
+                                    </div>
+                                </div>
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">{labels.jigyoName}</label>
+                                        <div class="custom-underline-output">{jigyo.jigyoName}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6"></lightning-layout-item>
+
+                    <!-- 支部コード -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-grid slds-gutters_x-small">
+                            <div class="slds-col slds-size_1-of-2">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label">{labels.shibuCode}</label>
+                                    <div class="custom-underline-output">{jigyo.shibuCode}</div>
+                                </div>
+                            </div>
+                            <div class="slds-col slds-size_1-of-2">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label">支部名</label>
+                                    <div class="custom-underline-output">{jigyo.shibuName}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6"></lightning-layout-item>
+
+                    <!-- 従事場所No. -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <template if:false={isJigyoKeyReadonly}>
+                            <div class="slds-grid slds-gutters">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">従事場所No.</label>
+                                        <div class="slds-form-element__control slds-grid slds-gutters_xx-small">
+                                            <div class="slds-col">
+                                                <lightning-input type="text" variant="label-hidden" name="jujiBashoNo" value={jigyoKey.jujiBasyoNo} data-field="jujiBasyoNo" data-required="jigyoKey" onblur={handleJigyoKeyBlur}></lightning-input>
+                                            </div>
+                                            <div class="slds-col slds-grow-none">
+                                                <lightning-button label="検索" onclick={handleBasyoSearchClick}></lightning-button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">従事場所名</label>
+                                        <div class="slds-form-element__control" style="height: 32px; display: flex; align-items: center; border-bottom: 1px solid #dddbda;">
+                                            <div class="slds-form-element__static" style="padding: 0; width: 100%">{basyoName}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <template if:true={isJigyoKeyReadonly}>
+                            <div class="slds-grid slds-gutters_x-small">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">従事場所No.</label>
+                                        <div class="custom-underline-output">{jigyoKey.jujiBasyoNo}</div>
+                                    </div>
+                                </div>
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">従事場所名</label>
+                                        <div class="custom-underline-output">{basyoName}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6"></lightning-layout-item>
+
+                    <!-- 実施年度 -->
+                    <lightning-layout-item size="6" padding="horizontal-small" class="slds-m-bottom_small">
+                        <div class="slds-grid slds-gutters">
+                            <div class="slds-col slds-size_1-of-2">
+                                <div class="slds-form-element">
+                                    <template if:false={isJigyoKeyReadonly}>
+                                        <lightning-input type="text" label={labels.jisiNendo} value={jigyoKey.jisiNendo} data-field="jisiNendo" data-required="jigyoKey" onblur={handleJigyoKeyBlur}></lightning-input>
+                                    </template>
+                                    <template if:true={isJigyoKeyReadonly}>
+                                        <div class="slds-form-element">
+                                            <label class="slds-form-element__label">{labels.jisiNendo}</label>
+                                            <div class="slds-form-element__control" style="height: 32px; display: flex; align-items: center; border-bottom: 1px solid #dddbda;">
+                                                <div class="slds-form-element__static" style="padding: 0; width: 100%">{jigyoKey.jisiNendo}</div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6" class="slds-m-bottom_small"></lightning-layout-item>
+
+                    <!-- 応募情報検索ボタン -->
+                    <lightning-layout-item size="12" padding="horizontal-small" class="slds-m-bottom_small">
+                        <lightning-button label="応募情報検索" variant="neutral" onclick={handleApplicationSearchClick}></lightning-button>
+                    </lightning-layout-item>
+
+                    <!-- 登録番号/相談員番号 + 応募情報表示ボタン -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-grid slds-grid_vertical-align-end slds-gutters_x-small">
+                            <div class="slds-col slds-size_2-of-4">
+                                <lightning-input type="text" label="登録番号/相談員番号" value={jujishaNo} data-field="jujishaNo" data-required="jujisha" onblur={handleJujishaNoBlur}></lightning-input>
+                            </div>
+                            <div class="slds-grow-none" style="margin-bottom: 2px">
+                                <lightning-button label="検索" onclick={handleJujishaSearchClick}></lightning-button>
+                            </div>
+                            <div class="slds-col slds-size_1-of-4" style="margin-bottom: 2px">
+                                <lightning-button label="応募情報表示" variant="neutral" onclick={handleShowApplicationClick}></lightning-button>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+
+                    <!-- 最終受付番号 -->
+                    <lightning-layout-item size="6" padding="horizontal-small" class="slds-grid slds-grid_align-end slds-grid_vertical-align-end slds-m-bottom_small">
+                        <div class="slds-form-element" style="width: 150px">
+                            <label class="slds-form-element__label">最終受付番号</label>
+                            <div class="custom-underline-output">{lastUketukeNo}</div>
+                        </div>
+                    </lightning-layout-item>
+                </lightning-layout>
+            </div>
+        </div>
+
+        <!-- セクション2: 応募者詳細情報 -->
+        <div class="slds-section slds-is-open">
+            <div class="slds-section__content">
+                <lightning-layout multiple-rows>
+                    <!-- 第1行 -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.uketukeNo}</label>
+                            <div class="slds-form-element__control">
+                                <div class="custom-underline-output slds-size_1-of-2">{uketukeNo}</div>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">全日程従事可能</label>
+                            <div class="slds-form-element__control slds-p-top_xxx-small">
+                                <lightning-input type="checkbox" label="全日程従事可能" checked={form.allDays} disabled={isAllDaysDisabled} onchange={handleAllDaysChange}></lightning-input>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+
+                    <!-- 第2行 -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.jujishaName}</label>
+                            <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.name}</div></div>
+                        </div>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">従事可能曜日</label>
+                            <div class="slds-form-element__control slds-grid slds-wrap slds-p-top_xxx-small" style="gap: 0.75rem">
+                                <template for:each={weekdayItems} for:item="day">
+                                    <lightning-input key={day.value} type="checkbox" label={day.value} value={day.value} checked={day.checked} disabled={isWeekdayDisabled} onchange={handleWeekdayChange}></lightning-input>
+                                </template>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+
+                    <!-- 第3行 -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.jujishaFurigana}</label>
+                            <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.furigana}</div></div>
+                        </div>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-grid slds-grid_vertical-align-end slds-gutters_x-small">
+                            <div class="slds-col slds-size_1-of-4">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label">従事可能個別日</label>
+                                    <div class="slds-form-element__control">
+                                        <div class="custom-output-box custom-text-center">{kanoubiStatusLabel}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="slds-col slds-size_3-of-4">
+                                <lightning-button label="入力" variant="neutral" onclick={handleKanoubiInputClick} disabled={isKanoubiButtonDisabled}></lightning-button>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+
+                    <!-- 第4行 -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label">{labels.shibuCode}</label>
+                            <div class="slds-form-element__control">
+                                <div class="custom-underline-output slds-size_1-of-3">{jujisha.shibuCode}</div>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-grid slds-grid_vertical-align-end slds-gutters_x-small">
+                            <div class="slds-col slds-size_1-of-4">
+                                <lightning-input type="number" label={labels.kibouNissu} value={form.kibouNissu} data-field="kibouNissu" data-validate="true" onchange={handleFormChange} required={isKibouNissuRequired} disabled={isApplicationDisabled}></lightning-input>
+                            </div>
+                            <div class="slds-col slds-size_3-of-4">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label">{labels.keiken}</label>
+                                    <div class="slds-form-element__control slds-grid" style="gap: 1.5rem; padding-top: 0.2rem">
+                                        <lightning-input type="radio" label="有" name="experience" value="1" checked={isKeiKenAri} onchange={handleKeikenChange} disabled={isApplicationDisabled}></lightning-input>
+                                        <lightning-input type="radio" label="無" name="experience" value="0" checked={isKeiKenNashi} onchange={handleKeikenChange} disabled={isApplicationDisabled}></lightning-input>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </lightning-layout-item>
+
+                    <!-- 第5行以降 -->
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-form-element slds-m-bottom_small">
+                            <label class="slds-form-element__label">支部名</label>
+                            <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.shibuName}</div></div>
+                        </div>
+                        <div class="slds-form-element slds-m-bottom_small">
+                            <label class="slds-form-element__label">{labels.jujishaAddress}</label>
+                            <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.address}</div></div>
+                        </div>
+                        <div class="slds-form-element slds-m-bottom_small">
+                            <label class="slds-form-element__label">{labels.jujishaTel}</label>
+                            <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.tel}</div></div>
+                        </div>
+                        <div class="slds-form-element slds-m-bottom_small">
+                            <label class="slds-form-element__label">{labels.jujishaFax}</label>
+                            <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.fax}</div></div>
+                        </div>
+                        <lightning-input type="tel" label={labels.telFixed} value={form.telFixed} data-field="telFixed" data-validate="true" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                        <lightning-input type="tel" label={labels.telMobile} value={form.telMobile} data-field="telMobile" data-validate="true" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                        <lightning-input type="tel" label={labels.fax} value={form.fax} data-field="fax" data-validate="true" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                        <lightning-input type="email" label={labels.mail} value={form.mail} data-field="mail" data-validate="true" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                        <lightning-textarea label={labels.biko} value={form.biko} data-field="biko" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-textarea>
+                    </lightning-layout-item>
+
+                    <lightning-layout-item size="6" padding="horizontal-small">
+                        <div class="slds-theme_default custom-skill-box slds-m-bottom_small">
+                            <div class="slds-grid slds-grid_align-center slds-m-bottom_small" style="gap: 1.5rem; align-items: center">
+                                <strong>スキル</strong><span>5(得意)</span><span>4</span><span>3</span><span>2</span><span>1(不得意)</span>
+                            </div>
+                            <lightning-layout multiple-rows>
+                                <template for:each={skillItems} for:item="skill">
+                                    <lightning-layout-item key={skill.field} size="6" padding="horizontal-small" class="slds-m-bottom_x-small">
+                                        <lightning-combobox label={skill.label} options={skillOptions} value={skill.value} data-field={skill.field} variant="label-inline" onchange={handleSkillChange} disabled={isSkillDisabled} required={isSkillRequired}></lightning-combobox>
+                                    </lightning-layout-item>
+                                </template>
+                            </lightning-layout>
+                        </div>
+                        <lightning-textarea label={labels.skillNote} value={form.skillNote} data-field="skillNote" onchange={handleFormChange} disabled={isSkillNoteDisabled}></lightning-textarea>
+                        <lightning-textarea label={labels.chosho} value={form.chosho} data-field="chosho" onchange={handleFormChange} disabled={isChoshoDisabled}></lightning-textarea>
+                        <lightning-input type="text" label={labels.sodanKamoku} value={form.sodanKamoku} data-field="sodanKamoku" onchange={handleFormChange} disabled={isSodanKamokuDisabled}></lightning-input>
+                    </lightning-layout-item>
+                </lightning-layout>
+            </div>
+        </div>
+
+        <div class="slds-grid slds-grid_align-spread slds-p-top_medium footer-action">
+            <div class="slds-grid">
+                <div class="btn-box slds-m-right_x-small">
+                    <lightning-button variant="brand" label="登録" onclick={handleSaveClick} stretch></lightning-button>
+                </div>
+                <div class="btn-box slds-m-right_x-small">
+                    <lightning-button variant="destructive" label="削除" onclick={handleDeleteClick} disabled={isDeleteDisabled} stretch></lightning-button>
+                </div>
+                <div class="btn-box">
+                    <lightning-button variant="destructive" label="全削除" onclick={handleDeleteAllClick} stretch></lightning-button>
+                </div>
+            </div>
+
+            <div class="slds-grid">
+                <div class="btn-box slds-m-right_x-small">
+                    <lightning-button variant="brand" label="メニュー" onclick={handleMenuClick} stretch></lightning-button>
+                </div>
+                <div class="btn-box slds-m-right_x-small">
+                    <lightning-button variant="brand-outline" label="クリア" onclick={handleClearClick} stretch></lightning-button>
+                </div>
+                <div class="btn-box">
+                    <lightning-button variant="brand" label="戻る" onclick={handleBackClick} stretch></lightning-button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 従事可能日指定（JUJ081）：子コンポーネントとしてモーダル表示する -->
+    <template if:true={isKanoubiOpen}>
+        <c-juj081
+            jigyo-key={jigyoKey}
+            jujisha-no={jujishaNo}
+            kanoubi-dates={kanoubiDates}
+            onsave={handleKanoubiSave}
+            onclose={handleKanoubiClose}
+        ></c-juj081>
+    </template>
+
+    <!-- 応募情報検索（JUJ082）：子コンポーネントとしてモーダル表示する -->
+    <template if:true={isApplicationSearchOpen}>
+        <c-juj082
+            jigyo-key={jigyoKey}
+            jigyo={jigyo}
+            basyo-name={basyoName}
+            key-readonly={isJigyoKeyReadonly}
+            onselect={handleApplicationSearchSelect}
+            onclose={handleApplicationSearchClose}
+        ></c-juj082>
+    </template>
+</template>
