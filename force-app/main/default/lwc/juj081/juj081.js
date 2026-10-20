@@ -98,6 +98,8 @@ const addMonths = (ym, n) => {
     d.setUTCMonth(d.getUTCMonth() + n);
     return toDateText(d).slice(0, 7);
 };
+// 表示年月は偶数月とする（奇数月の場合は前月）。表示期間は偶数月とその翌月の2カ月
+const toEvenMonth = (ym) => (Number(ym.slice(5, 7)) % 2 === 0 ? ym : addMonths(ym, -1));
 const todayText = () => {
     const now = new Date();
     return toDateText(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
@@ -186,12 +188,12 @@ export default class Juj081 extends LightningElement {
                 this.headerMessages = [MSG.NO_JISSHIBI];
                 return;
             }
-            // (3)③ 表示年月の初期値
+            // 2.(1)② 移動可能な範囲：最も早い実施日〜最も遅い実施日を含む表示期間（偶数月）
+            this.minMonth = toEvenMonth(result.minJisshibi.slice(0, 7));
+            this.maxMonth = toEvenMonth(result.maxJisshibi.slice(0, 7));
+            // (3)③ 表示年月の初期値（偶数月とし、移動可能な範囲に収める）
             const today = todayText();
-            this.selectedMonth = (result.minJisshibi > today ? result.minJisshibi : today).slice(0, 7);
-            // 【要確認 QA-05⑤】移動可能な範囲。暫定：実施日の範囲（初期表示年月を含む）
-            this.minMonth = [result.minJisshibi.slice(0, 7), this.selectedMonth].sort()[0];
-            this.maxMonth = [result.maxJisshibi.slice(0, 7), this.selectedMonth].sort()[1];
+            this.selectedMonth = this.toMonthInRange(toEvenMonth((result.minJisshibi > today ? result.minJisshibi : today).slice(0, 7)));
             // (4) 一覧の表示
             await this.loadDays();
         } catch (error) {
@@ -217,12 +219,20 @@ export default class Juj081 extends LightningElement {
 
     // (1) 表示年月の変更（移動可能な範囲内に収める）(2) 一覧の表示（保持中の従事可能日は変更しない）
     changeMonth(ym) {
-        const month = ym < this.minMonth ? this.minMonth : ym > this.maxMonth ? this.maxMonth : ym;
+        const month = this.toMonthInRange(ym);
         if (month === this.selectedMonth) {
             return;
         }
         this.selectedMonth = month;
         this.loadDays();
+    }
+
+    // 移動可能な範囲（minMonth〜maxMonth）に収める
+    toMonthInRange(ym) {
+        if (ym < this.minMonth) {
+            return this.minMonth;
+        }
+        return ym > this.maxMonth ? this.maxMonth : ym;
     }
 
     // 4.(1) 表示期間（表示年月の1日〜翌月末日）の実施日を取得する
@@ -365,13 +375,13 @@ export default class Juj081 extends LightningElement {
         return toDateText(end);
     }
 
-    // 表示年月の選択肢
+    // 表示年月の選択肢（移動可能な範囲の偶数月）
     get monthOptions() {
         const options = [];
         if (!this.minMonth) {
             return options;
         }
-        for (let ym = this.minMonth; ym <= this.maxMonth; ym = addMonths(ym, 1)) {
+        for (let ym = this.minMonth; ym <= this.maxMonth; ym = addMonths(ym, MONTH_STEP)) {
             options.push({ label: `${ym.slice(0, 4)}年${ym.slice(5, 7)}月`, value: ym });
         }
         return options;
@@ -447,6 +457,15 @@ export default class Juj081 extends LightningElement {
     }
 
     // 実施日がない場合は閉じるボタン以外を非活性とする
+    // 前2カ月・次2カ月：移動すると範囲を超える場合は非活性
+    get isPrevDisabled() {
+        return this.isActionDisabled || this.selectedMonth <= this.minMonth;
+    }
+
+    get isNextDisabled() {
+        return this.isActionDisabled || this.selectedMonth >= this.maxMonth;
+    }
+
     get isActionDisabled() {
         return this.noJisshibi || this.isLoading;
     }
