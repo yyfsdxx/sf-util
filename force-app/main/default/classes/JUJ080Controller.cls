@@ -114,83 +114,82 @@ public with sharing class JUJ080Controller {
         return toMap(findJujisha(jujishaNo));
     }
 
-    // ==================== 4. 応募情報表示 ====================
-    // 戻り値：{ jujisha, application | null }
+    // ==================== 4・5・11.(1) 応募情報の読込 ====================
+    // 応募情報表示ボタン（4.）：従事事業キー＋登録番号/相談員番号で取得する（applicationId は指定しない）
+    // 応募情報検索からの戻り（5.）：applicationId で取得する
+    // 戻り値：{ jigyoKey, jujishaNo, jujisha, application }（応募情報表示で応募がない場合は application = null → 追加モード）
     @AuraEnabled
-    public static Map<String, Object> showApplication(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo, String jujishaNo) {
+    public static Map<String, Object> loadApplication(
+        Id applicationId,
+        String jujiJigyoNo,
+        String jujiBasyoNo,
+        String jisiNendo,
+        String jujishaNo
+    ) {
         try {
-            従事事業__c jigyo = selectJigyo(toKey(jujiJigyoNo, jujiBasyoNo, jisiNendo), false);
-            if (jigyo == null) {
-                throw error(E_JIGYO_NOT_FOUND);
-            }
-            // (1)③ 会員・相談員のいずれからも取得できない場合はエラー
-            JujishaInfo jujisha = findJujisha(jujishaNo);
-            if (jujisha == null) {
-                throw error(E_JUJISHA_NOT_FOUND);
-            }
-            // (3)② 従事事業応募を取得する（取得できない場合は application = null → 追加モード）
-            従事事業応募__c app = selectApplicationByJujisha(jigyo.Id, jujisha);
-            ShowApplicationResult result = new ShowApplicationResult();
-            result.jujisha = jujisha;
-            result.application = app == null ? null : toApplicationInfo(app);
+            LoadApplicationResult result = applicationId != null
+                ? loadApplicationById(applicationId)
+                : loadApplicationByJujisha(toKey(jujiJigyoNo, jujiBasyoNo, jisiNendo), jujishaNo);
             return toMap(result);
         } catch (JujiOboException e) {
             throw toAuraException(e);
         }
     }
 
-    // ==================== 5・11.(1) 応募情報の読込（応募情報検索からの戻り） ====================
-    // 戻り値：{ jigyoKey, jujishaNo, jujisha, application }
-    @AuraEnabled
-    public static Map<String, Object> getApplication(Id applicationId) {
-        try {
-            従事事業応募__c app = selectApplicationById(applicationId);
-            if (app == null) {
-                throw error(E_APPLICATION_NOT_FOUND);
-            }
-            GetApplicationResult result = new GetApplicationResult();
-            result.jigyoKey = toKey(
-                app.従事事業__r.従事事業No__c,
-                app.従事事業__r.従事場所__r.従事場所No__c,
-                app.従事事業__r.実施年度__c
-            );
-            result.jujishaNo = app.会員__c != null ? app.会員__r.登録番号__c : app.相談員__r.相談員番号__c;
-            result.jujisha = findJujisha(result.jujishaNo);
-            result.application = toApplicationInfo(app);
-            return toMap(result);
-        } catch (JujiOboException e) {
-            throw toAuraException(e);
+    // 4. 従事事業キー＋番号で応募を取得する
+    private static LoadApplicationResult loadApplicationByJujisha(JigyoKey key, String jujishaNo) {
+        従事事業__c jigyo = selectJigyo(key, false);
+        if (jigyo == null) {
+            throw error(E_JIGYO_NOT_FOUND);
         }
+        // (1)③ 会員・相談員のいずれからも取得できない場合はエラー
+        JujishaInfo jujisha = findJujisha(jujishaNo);
+        if (jujisha == null) {
+            throw error(E_JUJISHA_NOT_FOUND);
+        }
+        // (3)② 従事事業応募を取得する（取得できない場合は application = null → 追加モード）
+        従事事業応募__c app = selectApplicationByJujisha(jigyo.Id, jujisha);
+        LoadApplicationResult result = new LoadApplicationResult();
+        result.jigyoKey = key;
+        result.jujishaNo = jujishaNo;
+        result.jujisha = jujisha;
+        result.application = app == null ? null : toApplicationInfo(app);
+        return result;
     }
 
-    // ==================== 6.(1) 従事可能日入力前のチェック ====================
+    // 5. 応募IDで応募を取得する（応募の従事事業キー・番号も返す）
+    private static LoadApplicationResult loadApplicationById(Id applicationId) {
+        従事事業応募__c app = selectApplicationById(applicationId);
+        if (app == null) {
+            throw error(E_APPLICATION_NOT_FOUND);
+        }
+        LoadApplicationResult result = new LoadApplicationResult();
+        result.jigyoKey = toKey(
+            app.従事事業__r.従事事業No__c,
+            app.従事事業__r.従事場所__r.従事場所No__c,
+            app.従事事業__r.実施年度__c
+        );
+        result.jujishaNo = app.会員__c != null ? app.会員__r.登録番号__c : app.相談員__r.相談員番号__c;
+        result.jujisha = findJujisha(result.jujishaNo);
+        result.application = toApplicationInfo(app);
+        return result;
+    }
+
+    // ==================== 6.(1)②③・7.(1)④ 従事事業の状態チェック ====================
+    // 従事可能日入力ボタン（checkJisshibi = true）：実施日の有無・一括割当実行中をチェックする
+    // 登録ボタン（checkJisshibi = false）：登録確認前に一括割当実行中をチェックする（登録処理内でも再チェックする）
     @AuraEnabled
-    public static void checkKanoubiInput(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo) {
+    public static void checkJigyo(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo, Boolean checkJisshibi) {
         try {
             従事事業__c jigyo = selectJigyo(toKey(jujiJigyoNo, jujiBasyoNo, jisiNendo), false);
             if (jigyo == null) {
                 throw error(E_JIGYO_NOT_FOUND);
             }
-            // ② 実施日が1件もない場合はエラー
-            if (!hasJisshibi(jigyo.Id)) {
+            // 6.(1)② 実施日が1件もない場合はエラー
+            if (checkJisshibi == true && !hasJisshibi(jigyo.Id)) {
                 throw error(E_NO_JISSHIBI);
             }
-            // ③ 一括割当実行中の場合はエラー
-            checkBulkAssigning(jigyo.Id);
-        } catch (JujiOboException e) {
-            throw toAuraException(e);
-        }
-    }
-
-    // ==================== 7.(1)④ 登録確認前のチェック ====================
-    // 一括割当実行中の場合はエラー（登録処理内でも再チェックする）
-    @AuraEnabled
-    public static void checkSave(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo) {
-        try {
-            従事事業__c jigyo = selectJigyo(toKey(jujiJigyoNo, jujiBasyoNo, jisiNendo), false);
-            if (jigyo == null) {
-                throw error(E_JIGYO_NOT_FOUND);
-            }
+            // 6.(1)③・7.(1)④ 一括割当実行中の場合はエラー
             checkBulkAssigning(jigyo.Id);
         } catch (JujiOboException e) {
             throw toAuraException(e);
@@ -807,12 +806,8 @@ public with sharing class JUJ080Controller {
         public transient Id recordId;
     }
 
-    public class ShowApplicationResult {
-        public JujishaInfo jujisha;
-        public ApplicationInfo application;
-    }
-
-    public class GetApplicationResult {
+    // 応募情報の読込結果
+    public class LoadApplicationResult {
         public JigyoKey jigyoKey;
         public String jujishaNo;
         public JujishaInfo jujisha;

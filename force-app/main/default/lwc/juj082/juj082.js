@@ -81,6 +81,17 @@ const buildColumns = (labels) => [
     { label: '登録日時', fieldName: 'createdDate', sortable: true }
 ];
 
+// 共通の検索子画面に渡す重なり順（本画面自体がモーダルのため 2）
+const SUB_SCREEN_LEVEL = 2;
+const SUB_JIGYO = 'JUJ110'; // 従事事業検索
+const SUB_BASYO = 'JUJ120'; // 従事場所検索
+const SUB_SHIBU = 'JUJ130'; // 支部検索
+const SUB_JUJISHA = 'JUJ140'; // 従事対象者検索
+const SUB_SODANIN = 'JUJ150'; // 相談員情報検索
+
+// 共通の検索子画面の戻り値（数値で返る場合も文字列として扱う）
+const toText = (value) => (value == null ? '' : String(value));
+
 const emptyKey = () => ({ jujiJigyoNo: '', jujiBasyoNo: '', jisiNendo: '' });
 
 const emptyCondition = () => ({
@@ -144,6 +155,11 @@ export default class Juj082 extends LightningElement {
 
     headerMessages = []; // 画面頭部に表示するエラーメッセージ
     isLoading = false;
+
+    // 共通の検索子画面
+    subScreenId = null; // 表示中の子画面（null＝非表示）
+    subScreenField = null; // 戻り値を設定する検索条件の項目（例：torokuNoFrom）
+    subScreenLevel = SUB_SCREEN_LEVEL;
 
     // 項目ラベル取得用のオブジェクト情報
     objectApiNames = [OBO_OBJECT, JIGYO_OBJECT, MEMBER_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
@@ -340,9 +356,53 @@ export default class Juj082 extends LightningElement {
 
     // ========== 検索ボタン（共通子画面） ==========
     // 【要確認】JUJ110・120・130・140・150（共通担当）の組込み方。接続までは仮表示とする
+    // 検索条件の初期値は渡さない。フォーカスアウトと同じ契機のため、メッセージは消去しない
     handleSubSearchClick(event) {
-        const screenId = event.target.dataset.screen;
-        this.headerMessages = [`${screenId} は未接続です。`]; // 開発中の仮表示
+        this.subScreenId = event.target.dataset.screen;
+        this.subScreenField = event.target.dataset.field || null;
+    }
+
+    // 子画面からの戻り
+    // ・従事事業キー（JUJ110・JUJ120）：キーを設定し、フォーカスアウトと同じく事業を取得する
+    //   （JUJ110 の戻り値に支部コードがなく、JUJ120 は場所のみのため、戻り値の名称は使用しない）
+    // ・検索条件（JUJ130・JUJ140・JUJ150）：番号と戻り値の名称を設定する（サーバへの名称取得は行わない）
+    handleSubScreenSelect(event) {
+        const rec = event.detail.selectedRecord;
+        const screenId = this.subScreenId;
+        const field = this.subScreenField;
+        this.closeSubScreen();
+        if (screenId === SUB_JIGYO) {
+            this.key = { jujiJigyoNo: toText(rec.jigyoNo), jujiBasyoNo: toText(rec.bashoNo), jisiNendo: toText(rec.nendo) };
+            this.onKeyChanged();
+        } else if (screenId === SUB_BASYO) {
+            this.key = { ...this.key, jujiBasyoNo: toText(rec.bashoNo) };
+            this.onKeyChanged();
+        } else if (screenId === SUB_SHIBU) {
+            this.setConditionNo(field, rec.shibuCode, rec.shibuName);
+        } else if (screenId === SUB_JUJISHA) {
+            // ※ 登録番号の検索ボタンは html でコメントアウト中（2026/10/20）。復活させる場合に使用する
+            // 登録番号の検索条件のため、相談員（登録番号なし）が選択された場合は設定しない
+            if (rec.torokuNo) {
+                this.setConditionNo(field, rec.torokuNo, rec.name);
+            }
+        } else if (screenId === SUB_SODANIN) {
+            this.setConditionNo(field, rec.sodanNo, rec.sodanName);
+        }
+    }
+
+    handleSubScreenClose() {
+        this.closeSubScreen();
+    }
+
+    closeSubScreen() {
+        this.subScreenId = null;
+        this.subScreenField = null;
+    }
+
+    // 検索条件の番号と、番号の横に表示する名称を設定する
+    setConditionNo(field, no, name) {
+        this.condition = { ...this.condition, [field]: toText(no) };
+        this.names = { ...this.names, [field]: toText(name) };
     }
 
     // ========== クリア・閉じる ==========
@@ -391,6 +451,27 @@ export default class Juj082 extends LightningElement {
 
     get hasHeaderMessages() {
         return this.headerMessages.length > 0;
+    }
+
+    // 共通の検索子画面の表示有無
+    get isJigyoSearchOpen() {
+        return this.subScreenId === SUB_JIGYO;
+    }
+
+    get isBasyoSearchOpen() {
+        return this.subScreenId === SUB_BASYO;
+    }
+
+    get isShibuSearchOpen() {
+        return this.subScreenId === SUB_SHIBU;
+    }
+
+    get isJujishaSearchOpen() {
+        return this.subScreenId === SUB_JUJISHA;
+    }
+
+    get isSodaninSearchOpen() {
+        return this.subScreenId === SUB_SODANIN;
     }
 
     // ========== Getter（項目ラベル） ==========

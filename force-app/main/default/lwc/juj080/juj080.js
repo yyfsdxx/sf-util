@@ -17,18 +17,17 @@ import { getObjectInfos } from 'lightning/uiObjectInfoApi';
 //   登録リクエストは JSON 文字列（requestJson）で渡す。戻り値の構造は従来どおり。
 // import getJigyo from '@salesforce/apex/JUJ080Controller.getJigyo';
 // import getJujisha from '@salesforce/apex/JUJ080Controller.getJujisha';
-// import showApplication from '@salesforce/apex/JUJ080Controller.showApplication';
-// import getApplication from '@salesforce/apex/JUJ080Controller.getApplication';
-// import checkKanoubiInput from '@salesforce/apex/JUJ080Controller.checkKanoubiInput';
-// import checkSave from '@salesforce/apex/JUJ080Controller.checkSave';
+// import loadApplication from '@salesforce/apex/JUJ080Controller.loadApplication';
+// import checkJigyo from '@salesforce/apex/JUJ080Controller.checkJigyo';
 // import saveApplication from '@salesforce/apex/JUJ080Controller.saveApplication';
 // import deleteApplication from '@salesforce/apex/JUJ080Controller.deleteApplication';
 // import deleteAllApplications from '@salesforce/apex/JUJ080Controller.deleteAllApplications';
 
-// 【要確認】子画面（JUJ110・120・140）の呼出し方式。
-// ※ 子画面は共通に合わせて子コンポーネントとして html に配置する（JUJ081・JUJ082 は配置済み）。
-//   未接続の子画面はここに登録がないため「未接続」と表示する。
-const SUB_SCREENS = {};
+// 共通の検索子画面（JUJ110・120・140）に渡す重なり順（本画面から直接開くため 1）
+const SUB_SCREEN_LEVEL = 1;
+
+// 共通の検索子画面の戻り値（数値で返る場合も文字列として扱う）
+const toText = (value) => (value == null ? '' : String(value));
 
 // 遷移元
 const FROM_JIGYO_INFO = 'JIGYO_INFO'; // 従事事業基本情報
@@ -190,20 +189,28 @@ const getJigyo = async ({ jujiJigyoNo, jujiBasyoNo, jisiNendo }) => {
     };
 };
 const getJujisha = async ({ jujishaNo }) => (jujishaNo === '9999999' ? null : STUB_JUJISHA(jujishaNo));
-const showApplication = async ({ jujishaNo }) => {
+const loadApplication = async ({ applicationId, jujiJigyoNo, jujiBasyoNo, jisiNendo, jujishaNo }) => {
+    // 応募情報検索からの戻り（応募ID指定）：固定の応募を返す
+    if (applicationId) {
+        return {
+            jigyoKey: { jujiJigyoNo: '0000001', jujiBasyoNo: '0000000001', jisiNendo: '2026' },
+            jujishaNo: '1111111',
+            jujisha: STUB_JUJISHA('1111111'),
+            application: STUB_APPLICATION
+        };
+    }
+    // 応募情報表示（従事事業キー＋番号指定）
     if (jujishaNo === '9999999') {
         throw { body: { message: MSG.JUJISHA_NOT_FOUND } };
     }
-    return { jujisha: STUB_JUJISHA(jujishaNo), application: jujishaNo === '1111111' ? STUB_APPLICATION : null };
+    return {
+        jigyoKey: { jujiJigyoNo, jujiBasyoNo, jisiNendo },
+        jujishaNo,
+        jujisha: STUB_JUJISHA(jujishaNo),
+        application: jujishaNo === '1111111' ? STUB_APPLICATION : null
+    };
 };
-const getApplication = async () => ({
-    jigyoKey: { jujiJigyoNo: '0000001', jujiBasyoNo: '0000000001', jisiNendo: '2026' },
-    jujishaNo: '1111111',
-    jujisha: STUB_JUJISHA('1111111'),
-    application: STUB_APPLICATION
-});
-const checkKanoubiInput = async () => {};
-const checkSave = async () => {};
+const checkJigyo = async () => {};
 const saveApplication = async ({ requestJson }) => {
     const req = JSON.parse(requestJson);
     if (!req.applicationId && req.jujishaNo === '1111111') {
@@ -240,6 +247,10 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
 
     isApplicationSearchOpen = false; // 応募情報検索（JUJ082）の表示有無
     isKanoubiOpen = false; // 従事可能日指定（JUJ081）の表示有無
+    isJigyoSearchOpen = false; // 従事事業検索（JUJ110）の表示有無
+    isBasyoSearchOpen = false; // 従事場所検索（JUJ120）の表示有無
+    isJujishaSearchOpen = false; // 従事対象者検索（JUJ140）の表示有無
+    subScreenLevel = SUB_SCREEN_LEVEL;
     isDirty = false; // 未登録の変更有無
     isLoading = false;
     headerMessages = []; // 画面頭部に表示するエラーメッセージ
@@ -286,22 +297,42 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.onJigyoKeyChanged();
     }
 
-    async handleJigyoSearchClick() {
-        // 【要確認】JUJ110 の戻り値
-        const result = await this.openSubScreen('JUJ110', {});
-        if (result) {
-            this.jigyoKey = { ...this.jigyoKey, jujiJigyoNo: result.jujiJigyoNo };
-            this.onJigyoKeyChanged();
-        }
+    // 従事事業検索（JUJ110）：検索条件は初期値なし。フォーカスアウトと同じ契機のため、メッセージは消去しない
+    handleJigyoSearchClick() {
+        this.isJigyoSearchOpen = true;
     }
 
-    async handleBasyoSearchClick() {
-        // 【要確認】JUJ120 の戻り値
-        const result = await this.openSubScreen('JUJ120', {});
-        if (result) {
-            this.jigyoKey = { ...this.jigyoKey, jujiBasyoNo: result.jujiBasyoNo };
-            this.onJigyoKeyChanged();
-        }
+    // 従事事業検索からの戻り：従事事業キー3項目を設定し、「2. 従事事業キー変更時」の処理を行う
+    handleJigyoSearchSelect(event) {
+        this.isJigyoSearchOpen = false;
+        const rec = event.detail.selectedRecord;
+        this.jigyoKey = {
+            jujiJigyoNo: toText(rec.jigyoNo),
+            jujiBasyoNo: toText(rec.bashoNo),
+            jisiNendo: toText(rec.nendo)
+        };
+        this.onJigyoKeyChanged();
+    }
+
+    handleJigyoSearchClose() {
+        this.isJigyoSearchOpen = false;
+    }
+
+    // 従事場所検索（JUJ120）
+    handleBasyoSearchClick() {
+        this.isBasyoSearchOpen = true;
+    }
+
+    // 従事場所検索からの戻り：従事場所No を設定し、「2. 従事事業キー変更時」の処理を行う
+    handleBasyoSearchSelect(event) {
+        this.isBasyoSearchOpen = false;
+        const rec = event.detail.selectedRecord;
+        this.jigyoKey = { ...this.jigyoKey, jujiBasyoNo: toText(rec.bashoNo) };
+        this.onJigyoKeyChanged();
+    }
+
+    handleBasyoSearchClose() {
+        this.isBasyoSearchOpen = false;
     }
 
     async onJigyoKeyChanged() {
@@ -354,13 +385,21 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.onJujishaNoChanged();
     }
 
-    async handleJujishaSearchClick() {
-        // 【要確認】JUJ140（共通担当）の戻り値
-        const result = await this.openSubScreen('JUJ140', {});
-        if (result) {
-            this.jujishaNo = result.jujishaNo;
-            this.onJujishaNoChanged();
-        }
+    // 従事対象者検索（JUJ140）
+    handleJujishaSearchClick() {
+        this.isJujishaSearchOpen = true;
+    }
+
+    // 従事対象者検索からの戻り：番号（会員は登録番号、相談員は相談員番号）を設定し、「3. 番号の変更時」の処理を行う
+    handleJujishaSearchSelect(event) {
+        this.isJujishaSearchOpen = false;
+        const rec = event.detail.selectedRecord;
+        this.jujishaNo = toText(rec.startNo); // 登録番号があれば登録番号、なければ相談員番号
+        this.onJujishaNoChanged();
+    }
+
+    handleJujishaSearchClose() {
+        this.isJujishaSearchOpen = false;
     }
 
     async onJujishaNoChanged() {
@@ -411,7 +450,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
         try {
             // 戻り値：{ jujisha, application | null }
-            const result = await showApplication({ ...this.jigyoKey, jujishaNo: this.jujishaNo });
+            const result = await loadApplication({ ...this.jigyoKey, jujishaNo: this.jujishaNo });
             // (3) ① 初期化した後、従事者を表示する
             this.resetApplicationForm();
             this.jujisha = result.jujisha || {};
@@ -442,7 +481,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         const { applicationId } = event.detail;
         try {
             // 戻り値：{ jigyoKey, jujishaNo, jujisha, application }
-            const res = await getApplication({ applicationId });
+            const res = await loadApplication({ applicationId });
             // ① 従事事業メニューから遷移した場合、選択された応募の従事事業キーを設定し、事業の取得を行う
             if (this.fromScreen === FROM_MENU) {
                 this.jigyoKey = { ...res.jigyoKey };
@@ -470,7 +509,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
         // (1) ②③ 実施日の有無・一括割当実行中（サーバ側でチェック）
         try {
-            await checkKanoubiInput({ ...this.jigyoKey });
+            await checkJigyo({ ...this.jigyoKey, checkJisshibi: true });
         } catch (error) {
             this.showError(error);
             return;
@@ -562,7 +601,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
         // (1) ④ 一括割当実行中（サーバ側でチェック。登録処理内でも再チェックする）
         try {
-            await checkSave({ ...this.jigyoKey });
+            await checkJigyo({ ...this.jigyoKey, checkJisshibi: false });
         } catch (error) {
             this.showError(error);
             return;
@@ -810,15 +849,6 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     // ========== 子画面・ダイアログ・メッセージ ==========
-    async openSubScreen(screenId, params) {
-        const modal = SUB_SCREENS[screenId];
-        if (!modal) {
-            this.showErrorMessage(`${screenId} は未接続です。`); // 開発中の仮表示
-            return undefined;
-        }
-        return modal.open({ size: 'large', ...params });
-    }
-
     confirmDialog(message) {
         return LightningConfirm.open({ message, variant: 'headerless' });
     }

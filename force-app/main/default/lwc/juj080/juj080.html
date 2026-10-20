@@ -367,4 +367,27 @@
             onclose={handleApplicationSearchClose}
         ></c-juj082>
     </template>
+
+    <!-- 共通の検索子画面（検索条件の初期値は渡さない） -->
+    <template if:true={isJigyoSearchOpen}>
+        <c-juj110
+            z-index-level={subScreenLevel}
+            onselect={handleJigyoSearchSelect}
+            onclose={handleJigyoSearchClose}
+        ></c-juj110>
+    </template>
+    <template if:true={isBasyoSearchOpen}>
+        <c-juj120
+            z-index-level={subScreenLevel}
+            onselect={handleBasyoSearchSelect}
+            onclose={handleBasyoSearchClose}
+        ></c-juj120>
+    </template>
+    <template if:true={isJujishaSearchOpen}>
+        <c-juj140
+            z-index-level={subScreenLevel}
+            onselect={handleJujishaSearchSelect}
+            onclose={handleJujishaSearchClose}
+        ></c-juj140>
+    </template>
 </template>

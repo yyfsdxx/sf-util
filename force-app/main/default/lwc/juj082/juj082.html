@@ -230,13 +230,16 @@
                                             onblur={handleNoBlur}
                                         ></lightning-input>
                                     </div>
+                                    <!-- 登録番号の検索ボタンは、対応する共通子画面がないためコメントアウト（2026/10/20）
                                     <div class="slds-col slds-grow-none">
                                         <lightning-button
                                             label="検索"
                                             data-screen="JUJ140"
+                                            data-field="torokuNoFrom"
                                             onclick={handleSubSearchClick}
                                         ></lightning-button>
                                     </div>
+                                    -->
                                     <div class="slds-col">
                                         <div
                                             style="
@@ -270,13 +273,16 @@
                                             onblur={handleNoBlur}
                                         ></lightning-input>
                                     </div>
+                                    <!-- 登録番号の検索ボタンは、対応する共通子画面がないためコメントアウト（2026/10/20）
                                     <div class="slds-col slds-grow-none">
                                         <lightning-button
                                             label="検索"
                                             data-screen="JUJ140"
+                                            data-field="torokuNoTo"
                                             onclick={handleSubSearchClick}
                                         ></lightning-button>
                                     </div>
+                                    -->
                                     <div class="slds-col">
                                         <div
                                             style="
@@ -318,6 +324,7 @@
                                         <lightning-button
                                             label="検索"
                                             data-screen="JUJ130"
+                                            data-field="shibuCodeFrom"
                                             onclick={handleSubSearchClick}
                                         ></lightning-button>
                                     </div>
@@ -358,6 +365,7 @@
                                         <lightning-button
                                             label="検索"
                                             data-screen="JUJ130"
+                                            data-field="shibuCodeTo"
                                             onclick={handleSubSearchClick}
                                         ></lightning-button>
                                     </div>
@@ -402,6 +410,7 @@
                                         <lightning-button
                                             label="検索"
                                             data-screen="JUJ150"
+                                            data-field="sodaninNoFrom"
                                             onclick={handleSubSearchClick}
                                         ></lightning-button>
                                     </div>
@@ -442,6 +451,7 @@
                                         <lightning-button
                                             label="検索"
                                             data-screen="JUJ150"
+                                            data-field="sodaninNoTo"
                                             onclick={handleSubSearchClick}
                                         ></lightning-button>
                                     </div>
@@ -548,4 +558,23 @@
 
     <!-- モーダルの背景 -->
     <div class="slds-backdrop slds-backdrop_open"></div>
+
+    <!-- 共通の検索子画面（検索条件の初期値は渡さない） -->
+    <template if:true={isJigyoSearchOpen}>
+        <c-juj110 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj110>
+    </template>
+    <template if:true={isBasyoSearchOpen}>
+        <c-juj120 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj120>
+    </template>
+    <template if:true={isShibuSearchOpen}>
+        <c-juj130 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj130>
+    </template>
+    <!-- 登録番号の検索ボタンをコメントアウトしたため未使用（2026/10/20）
+    <template if:true={isJujishaSearchOpen}>
+        <c-juj140 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj140>
+    </template>
+    -->
+    <template if:true={isSodaninSearchOpen}>
+        <c-juj150 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj150>
+    </template>
 </template>

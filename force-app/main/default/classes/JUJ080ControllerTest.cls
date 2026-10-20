@@ -248,18 +248,18 @@ private class JUJ080ControllerTest {
         Assert.isNull(JUJ080Controller.getJujisha(''));
     }
 
-    // ==================== showApplication ====================
+    // ==================== loadApplication（応募情報表示：従事事業キー＋番号） ====================
     @IsTest
-    static void showApplication_応募なし() {
-        Map<String, Object> r = JUJ080Controller.showApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+    static void loadApplication_番号_応募なし() {
+        Map<String, Object> r = JUJ080Controller.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual('テスト 太郎', get(r, 'jujisha.name'));
         Assert.isNull(get(r, 'application'));
     }
 
     @IsTest
-    static void showApplication_応募あり() {
+    static void loadApplication_番号_応募あり() {
         従事事業応募__c app = createMemberApplication(1);
-        Map<String, Object> r = JUJ080Controller.showApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+        Map<String, Object> r = JUJ080Controller.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual(String.valueOf(app.Id), get(r, 'application.applicationId'));
         List<Object> kanoubiDates = (List<Object>) get(r, 'application.kanoubiDates');
         Assert.areEqual(1, kanoubiDates.size());
@@ -271,9 +271,9 @@ private class JUJ080ControllerTest {
     }
 
     @IsTest
-    static void showApplication_従事者なしはエラー() {
+    static void loadApplication_番号_従事者なしはエラー() {
         try {
-            JUJ080Controller.showApplication(JIGYO_NO, BASYO_NO, NENDO, '0000000');
+            JUJ080Controller.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, '0000000');
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_JUJISHA_NOT_FOUND[1], e.getMessage());
@@ -281,20 +281,20 @@ private class JUJ080ControllerTest {
     }
 
     @IsTest
-    static void showApplication_事業なしはエラー() {
+    static void loadApplication_番号_事業なしはエラー() {
         try {
-            JUJ080Controller.showApplication(WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+            JUJ080Controller.loadApplication(null, WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_JIGYO_NOT_FOUND[1], e.getMessage());
         }
     }
 
-    // ==================== getApplication ====================
+    // ==================== loadApplication（応募情報検索からの戻り：応募ID） ====================
     @IsTest
-    static void getApplication_取得できる() {
+    static void loadApplication_応募ID_取得できる() {
         従事事業応募__c app = createMemberApplication(1);
-        Map<String, Object> r = JUJ080Controller.getApplication(app.Id);
+        Map<String, Object> r = JUJ080Controller.loadApplication(app.Id, null, null, null, null);
         Assert.areEqual(JIGYO_NO, get(r, 'jigyoKey.jujiJigyoNo'));
         Assert.areEqual(BASYO_NO, get(r, 'jigyoKey.jujiBasyoNo'));
         Assert.areEqual(NENDO, get(r, 'jigyoKey.jisiNendo'));
@@ -304,22 +304,22 @@ private class JUJ080ControllerTest {
     }
 
     @IsTest
-    static void getApplication_削除済みはエラー() {
+    static void loadApplication_応募ID_削除済みはエラー() {
         従事事業応募__c app = createMemberApplication(1);
         delete app;
         try {
-            JUJ080Controller.getApplication(app.Id);
+            JUJ080Controller.loadApplication(app.Id, null, null, null, null);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_APPLICATION_NOT_FOUND[1], e.getMessage());
         }
     }
 
-    // ==================== checkKanoubiInput ====================
+    // ==================== checkJigyo（従事可能日入力：実施日あり） ====================
     @IsTest
-    static void checkKanoubiInput_実施日なしはエラー() {
+    static void checkJigyo_従事可能日入力_実施日なしはエラー() {
         try {
-            JUJ080Controller.checkKanoubiInput(JIGYO_NO, BASYO_NO, NENDO);
+            JUJ080Controller.checkJigyo(JIGYO_NO, BASYO_NO, NENDO, true);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_NO_JISSHIBI[1], e.getMessage());
@@ -327,16 +327,16 @@ private class JUJ080ControllerTest {
     }
 
     @IsTest
-    static void checkKanoubiInput_実施日あり() {
+    static void checkJigyo_従事可能日入力_実施日あり() {
         insert new 従事事業明細__c(従事事業__c = jigyo().Id, 実施日__c = Date.newInstance(2026, 11, 1));
-        JUJ080Controller.checkKanoubiInput(JIGYO_NO, BASYO_NO, NENDO);
+        JUJ080Controller.checkJigyo(JIGYO_NO, BASYO_NO, NENDO, true);
         Assert.isTrue(true, '例外が発生しないこと');
     }
 
     @IsTest
-    static void checkKanoubiInput_事業なしはエラー() {
+    static void checkJigyo_従事可能日入力_事業なしはエラー() {
         try {
-            JUJ080Controller.checkKanoubiInput(WRONG_JIGYO_NO, BASYO_NO, NENDO);
+            JUJ080Controller.checkJigyo(WRONG_JIGYO_NO, BASYO_NO, NENDO, true);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_JIGYO_NOT_FOUND[1], e.getMessage());
@@ -369,7 +369,7 @@ private class JUJ080ControllerTest {
         req.form.weekdays = new List<String>();
         save(req);
 
-        Map<String, Object> r = JUJ080Controller.showApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
+        Map<String, Object> r = JUJ080Controller.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual(7, ((List<Object>) get(r, 'application.form.weekdays')).size());
         Assert.areEqual(1, ((List<Object>) get(r, 'application.form.skills')).size());
     }
@@ -445,15 +445,15 @@ private class JUJ080ControllerTest {
     }
 
     @IsTest
-    static void checkSave_正常() {
-        JUJ080Controller.checkSave(JIGYO_NO, BASYO_NO, NENDO);
+    static void checkJigyo_登録_正常() {
+        JUJ080Controller.checkJigyo(JIGYO_NO, BASYO_NO, NENDO, false);
         Assert.isTrue(true, '例外が発生しないこと');
     }
 
     @IsTest
-    static void checkSave_事業なしはエラー() {
+    static void checkJigyo_登録_事業なしはエラー() {
         try {
-            JUJ080Controller.checkSave(WRONG_JIGYO_NO, BASYO_NO, NENDO);
+            JUJ080Controller.checkJigyo(WRONG_JIGYO_NO, BASYO_NO, NENDO, false);
             Assert.fail('例外が発生すること');
         } catch (AuraHandledException e) {
             Assert.areEqual(JUJ080Controller.E_JIGYO_NOT_FOUND[1], e.getMessage());
