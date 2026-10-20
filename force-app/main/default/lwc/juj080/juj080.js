@@ -308,22 +308,15 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     objectInfos;
 
     // ========== 1. 初期表示 ==========
-    // ※ スタブ：ローカルプレビュー用に遷移元を切り替える（Apex デプロイ後に削除）
-    connectedCallback() {
-        if (STUB_PAGE_STATE.c__from && !this._initialized) {
-            this._initialized = true;
-            this.initialize(STUB_PAGE_STATE);
-        }
-    }
-
     // 【要確認】遷移パラメータの受渡し方式（暫定：URL state）
+    // ※ スタブ：STUB_PAGE_STATE に遷移元が設定されている場合はそれを使用する（ローカルプレビュー用。Apex デプロイ後は pageRef.state のみとする）
     @wire(CurrentPageReference)
     wiredPageRef(pageRef) {
-        if (!pageRef || this._initialized) {
+        if (this._initialized || (!pageRef && !STUB_PAGE_STATE.c__from)) {
             return;
         }
         this._initialized = true;
-        this.initialize(pageRef.state || {});
+        this.initialize(STUB_PAGE_STATE.c__from ? STUB_PAGE_STATE : pageRef.state || {});
     }
 
     async initialize(state) {
