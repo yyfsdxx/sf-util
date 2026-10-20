@@ -117,20 +117,42 @@ const emptyNames = () => ({
 });
 
 // ========== スタブ（Apex デプロイ後に削除）==========
-// テスト用：番号に 9999999 → 名称なし
-const search = async () => [
-    { applicationId: 'a00000000000001AAA', uketukeNo: 1, torokuNo: '1000002', sodaninNo: null, name: '佐藤 花子', createdDate: '2026/10/01 10:00:00' },
-    { applicationId: 'a00000000000002AAA', uketukeNo: 2, torokuNo: '1000001', sodaninNo: null, name: '山田 太郎', createdDate: '2026/10/02 11:30:00' },
-    { applicationId: 'a00000000000003AAA', uketukeNo: 0, torokuNo: null, sodaninNo: '9000001', name: '山田 一郎', createdDate: '2026/10/03 09:15:00' }
+// テストデータ（JUJ080 のスタブと同じ応募ID・番号）
+//   事業A：0000001 / 0000000001 / 2026（応募 3件）、事業B：0000002 / 0000000002 / 2026（応募 1件）。それ以外の事業キー → 0件
+//   ※ 検索条件（受付番号・番号・氏名等）では絞り込まない。従事事業キーのみで絞り込む
+//   番号の名称：1000001 山田 太郎・1000002 佐藤 花子（会員）、9000001 山田 一郎（相談員）、001 東支部・002 西支部
+const STUB_JIGYO_LIST = [
+    { key: { jujiJigyoNo: '0000001', jujiBasyoNo: '0000000001', jisiNendo: '2026' }, jigyoName: 'テスト事業A', shibuCode: '001', shibuName: '東支部', basyoName: 'テスト場所A' },
+    { key: { jujiJigyoNo: '0000002', jujiBasyoNo: '0000000002', jisiNendo: '2026' }, jigyoName: 'テスト事業B', shibuCode: '002', shibuName: '西支部', basyoName: 'テスト場所B' }
 ];
-const getJigyo = async ({ jujiJigyoNo, jujiBasyoNo, jisiNendo }) => ({
-    basyoName: jujiBasyoNo ? `テスト場所${jujiBasyoNo}` : '',
-    jigyo:
-        jujiJigyoNo && jujiBasyoNo && jisiNendo && jujiJigyoNo !== '9999999'
-            ? { jigyoName: 'テスト事業', shibuCode: '001', shibuName: 'テスト支部' }
-            : null
-});
-const getName = async ({ code }) => (code && code !== '9999999' ? `テスト名称${code}` : null);
+const STUB_ROWS = [
+    { jigyoNo: '0000001', applicationId: 'a00000000000001AAA', uketukeNo: 1, torokuNo: '1000002', sodaninNo: null, name: '佐藤 花子', createdDate: '2026/10/01 10:00:00' },
+    { jigyoNo: '0000001', applicationId: 'a00000000000002AAA', uketukeNo: 2, torokuNo: '1000001', sodaninNo: null, name: '山田 太郎', createdDate: '2026/10/02 11:30:00' },
+    { jigyoNo: '0000001', applicationId: 'a00000000000003AAA', uketukeNo: 0, torokuNo: null, sodaninNo: '9000001', name: '山田 一郎', createdDate: '2026/10/03 09:15:00' },
+    { jigyoNo: '0000002', applicationId: 'a00000000000004AAA', uketukeNo: 1, torokuNo: '1000001', sodaninNo: null, name: '山田 太郎', createdDate: '2026/10/05 12:00:00' }
+];
+const STUB_NAMES = {
+    TOROKU: { 1000001: '山田 太郎', 1000002: '佐藤 花子' },
+    SHIBU: { '001': '東支部', '002': '西支部' },
+    SODANIN: { 9000001: '山田 一郎' }
+};
+const findStubJigyo = (key) =>
+    STUB_JIGYO_LIST.find(
+        (j) => j.key.jujiJigyoNo === key.jujiJigyoNo && j.key.jujiBasyoNo === key.jujiBasyoNo && j.key.jisiNendo === key.jisiNendo
+    );
+const search = async ({ conditionJson }) => {
+    const jigyo = findStubJigyo(JSON.parse(conditionJson));
+    return jigyo ? STUB_ROWS.filter((r) => r.jigyoNo === jigyo.key.jujiJigyoNo).map(({ jigyoNo, ...row }) => row) : [];
+};
+const getJigyo = async (key) => {
+    const jigyo = findStubJigyo(key);
+    const basyo = STUB_JIGYO_LIST.find((j) => j.key.jujiBasyoNo === key.jujiBasyoNo);
+    return {
+        basyoName: basyo ? basyo.basyoName : '',
+        jigyo: jigyo ? { jigyoName: jigyo.jigyoName, shibuCode: jigyo.shibuCode, shibuName: jigyo.shibuName } : null
+    };
+};
+const getName = async ({ nameType, code }) => (STUB_NAMES[nameType] || {})[code] || null;
 // ========== スタブ ここまで ==========
 
 export default class Juj082 extends LightningElement {

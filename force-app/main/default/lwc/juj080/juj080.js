@@ -135,86 +135,131 @@ const emptyForm = () => ({
 });
 
 // ========== スタブ（Apex 実装後に削除）==========
-// テスト用：従事事業No に 9999999 → 事業取得不可、登録番号に 9999999 → 従事者取得不可、
-//          登録番号に 1111111 → 登録済みの応募あり（変更モード）
+// ■ 遷移元の切替（ローカルプレビュー用）
+//   従事事業メニューから：{}（遷移パラメータなし。従事事業キーは入力可）
+//   従事事業基本情報から：下のコメントを外す（事業A のキーを引き継ぎ、入力不可）
+const STUB_PAGE_STATE = {};
+// const STUB_PAGE_STATE = { c__from: FROM_JIGYO_INFO, c__jujiJigyoNo: '0000001', c__jujiBasyoNo: '0000000001', c__jisiNendo: '2026' };
+//
+// ■ テストデータ（JUJ082 のスタブと同じ応募ID・番号）
+//   事業A：0000001 / 0000000001 / 2026（応募 3件：佐藤 花子・山田 太郎・山田 一郎）
+//   事業B：0000002 / 0000000002 / 2026（応募 1件：山田 太郎）
+//   番号：1000001 山田 太郎・1000002 佐藤 花子（会員）、9000001 山田 一郎（相談員）、9999999 → 従事者なし、その他 → 会員「テスト 太郎」
+//   上記以外の事業キー → 事業なし
+const STUB_JIGYO_LIST = [
+    { key: { jujiJigyoNo: '0000001', jujiBasyoNo: '0000000001', jisiNendo: '2026' }, jigyoName: 'テスト事業A', shibuCode: '001', shibuName: '東支部', basyoName: 'テスト場所A', lastUketukeNo: 2 },
+    { key: { jujiJigyoNo: '0000002', jujiBasyoNo: '0000000002', jisiNendo: '2026' }, jigyoName: 'テスト事業B', shibuCode: '002', shibuName: '西支部', basyoName: 'テスト場所B', lastUketukeNo: 1 }
+];
+const STUB_JUJISHA_LIST = {
+    1000001: { jujishaType: 'MEMBER', name: '山田 太郎', furigana: 'ヤマダ タロウ', shibuCode: '001', shibuName: '東支部', address: '大阪府大阪市1-1-1', tel: '06-0000-0001', fax: '06-0000-0101' },
+    1000002: { jujishaType: 'MEMBER', name: '佐藤 花子', furigana: 'サトウ ハナコ', shibuCode: '002', shibuName: '西支部', address: '大阪府堺市2-2-2', tel: '072-000-0002', fax: '072-000-0102' },
+    9000001: { jujishaType: 'SODANIN', name: '山田 一郎', furigana: 'ヤマダ イチロウ', shibuCode: '', shibuName: '', address: '京都府京都市3-3-3', tel: '075-000-0003', fax: '' }
+};
+const STUB_APPLICATIONS = [
+    {
+        jigyoKey: STUB_JIGYO_LIST[0].key,
+        jujishaNo: '1000002',
+        application: {
+            applicationId: 'a00000000000001AAA',
+            uketukeNo: 1,
+            systemModstamp: '2026-10-01T01:00:00.000Z',
+            form: { telFixed: '072-111-1111', mail: 'sato@example.com', keiken: KEIKEN_ARI, weekdays: ['月', '水'], skills: [{ field: 'スキル_所得税__c', value: '5' }] },
+            kanoubiDates: [{ kanoubiDate: '2026-11-03', timeSlots: [{ startTime: '13:00', endTime: '15:00' }] }]
+        }
+    },
+    {
+        jigyoKey: STUB_JIGYO_LIST[0].key,
+        jujishaNo: '1000001',
+        application: {
+            applicationId: 'a00000000000002AAA',
+            uketukeNo: 2,
+            systemModstamp: '2026-10-02T02:30:00.000Z',
+            form: { telMobile: '090-2222-2222', keiken: KEIKEN_ARI, weekdays: ['火', '木'], kibouNissu: '3', skills: [{ field: 'スキル_法人税__c', value: '4' }], sodanKamoku: '法人税' },
+            kanoubiDates: [
+                { kanoubiDate: '2026-11-03', timeSlots: [{ startTime: '09:00', endTime: '12:00' }] },
+                { kanoubiDate: '2026-12-01', timeSlots: [{ startTime: '10:00', endTime: '11:00' }] }
+            ]
+        }
+    },
+    {
+        jigyoKey: STUB_JIGYO_LIST[0].key,
+        jujishaNo: '9000001',
+        application: {
+            applicationId: 'a00000000000003AAA',
+            uketukeNo: 0, // 未採番（マイページからの応募）
+            systemModstamp: '2026-10-03T00:15:00.000Z',
+            form: { mail: 'ichiro@example.com', keiken: '0', weekdays: [], biko: '午前のみ希望' },
+            kanoubiDates: []
+        }
+    },
+    {
+        jigyoKey: STUB_JIGYO_LIST[1].key,
+        jujishaNo: '1000001',
+        application: {
+            applicationId: 'a00000000000004AAA',
+            uketukeNo: 1,
+            systemModstamp: '2026-10-05T03:00:00.000Z',
+            form: { telFixed: '06-4444-4444', keiken: KEIKEN_ARI, weekdays: ['土'], skills: [{ field: 'スキル_消費税__c', value: '3' }] },
+            kanoubiDates: []
+        }
+    }
+];
+const isSameKey = (a, b) => a.jujiJigyoNo === b.jujiJigyoNo && a.jujiBasyoNo === b.jujiBasyoNo && a.jisiNendo === b.jisiNendo;
 const STUB_JUJISHA = (jujishaNo) => ({
     jujishaType: 'MEMBER',
-    jujishaNo,
     name: 'テスト 太郎',
     furigana: 'テスト タロウ',
     shibuCode: '001',
-    shibuName: 'テスト支部',
+    shibuName: '東支部',
     address: '東京都千代田区1-1-1',
     tel: '03-0000-0000',
-    fax: '03-0000-0001'
+    fax: '03-0000-0001',
+    ...(STUB_JUJISHA_LIST[jujishaNo] || {}),
+    jujishaNo
 });
-const STUB_APPLICATION = {
-    applicationId: 'a00000000000001AAA',
-    uketukeNo: 1,
-    systemModstamp: '2026-10-13T00:00:00.000Z',
-    form: {
-        telFixed: '03-1111-1111',
-        mail: 'test@example.com',
-        keiken: KEIKEN_ARI,
-        weekdays: ['月', '水'],
-        skills: [{ field: 'スキル_所得税__c', value: '5' }]
-    },
-    kanoubiDates: [
-        { kanoubiDate: '2026-11-03', timeSlots: [{ startTime: '13:00', endTime: '15:00' }] },
-        { kanoubiDate: '2026-12-01', timeSlots: [{ startTime: '10:00', endTime: '12:00' }] }
-    ]
+const STUB_INPUT_CONTROL = {
+    requiredWeekday: false,
+    requiredKanoubi: false,
+    requiredKibouNissu: false,
+    requiredSkill: false,
+    optionalSkill: true,
+    optionalSkillNote: true,
+    optionalChosho: true,
+    optionalSodanKamoku: true
 };
-const getJigyo = async ({ jujiJigyoNo, jujiBasyoNo, jisiNendo }) => {
-    const found = jujiJigyoNo && jujiBasyoNo && jisiNendo && jujiJigyoNo !== '9999999';
+const getJigyo = async (key) => {
+    const found = STUB_JIGYO_LIST.find((j) => isSameKey(j.key, key));
+    const basyo = STUB_JIGYO_LIST.find((j) => j.key.jujiBasyoNo === key.jujiBasyoNo);
     return {
-        basyoName: jujiBasyoNo ? `テスト場所${jujiBasyoNo}` : '',
+        basyoName: basyo ? basyo.basyoName : '',
         jigyo: found
-            ? {
-                  jigyoName: 'テスト事業',
-                  shibuCode: '001',
-                  shibuName: 'テスト支部',
-                  lastUketukeNo: 3,
-                  inputControl: {
-                      requiredWeekday: false,
-                      requiredKanoubi: false,
-                      requiredKibouNissu: false,
-                      requiredSkill: false,
-                      optionalSkill: true,
-                      optionalSkillNote: true,
-                      optionalChosho: true,
-                      optionalSodanKamoku: true
-                  }
-              }
+            ? { jigyoName: found.jigyoName, shibuCode: found.shibuCode, shibuName: found.shibuName, lastUketukeNo: found.lastUketukeNo, inputControl: STUB_INPUT_CONTROL }
             : null
     };
 };
 const getJujisha = async ({ jujishaNo }) => (jujishaNo === '9999999' ? null : STUB_JUJISHA(jujishaNo));
 const loadApplication = async ({ applicationId, jujiJigyoNo, jujiBasyoNo, jisiNendo, jujishaNo }) => {
-    // 応募情報検索からの戻り（応募ID指定）：固定の応募を返す
+    // 応募情報検索からの戻り（応募ID指定）：その応募の事業キー・番号・応募を返す
     if (applicationId) {
-        return {
-            jigyoKey: { jujiJigyoNo: '0000001', jujiBasyoNo: '0000000001', jisiNendo: '2026' },
-            jujishaNo: '1111111',
-            jujisha: STUB_JUJISHA('1111111'),
-            application: STUB_APPLICATION
-        };
+        const app = STUB_APPLICATIONS.find((a) => a.application.applicationId === applicationId);
+        if (!app) {
+            throw { body: { message: '対象の応募が存在しません。' } };
+        }
+        return { jigyoKey: { ...app.jigyoKey }, jujishaNo: app.jujishaNo, jujisha: STUB_JUJISHA(app.jujishaNo), application: app.application };
     }
     // 応募情報表示（従事事業キー＋番号指定）
+    const key = { jujiJigyoNo, jujiBasyoNo, jisiNendo };
     if (jujishaNo === '9999999') {
         throw { body: { message: MSG.JUJISHA_NOT_FOUND } };
     }
-    return {
-        jigyoKey: { jujiJigyoNo, jujiBasyoNo, jisiNendo },
-        jujishaNo,
-        jujisha: STUB_JUJISHA(jujishaNo),
-        application: jujishaNo === '1111111' ? STUB_APPLICATION : null
-    };
+    const app = STUB_APPLICATIONS.find((a) => isSameKey(a.jigyoKey, key) && a.jujishaNo === jujishaNo);
+    return { jigyoKey: key, jujishaNo, jujisha: STUB_JUJISHA(jujishaNo), application: app ? app.application : null };
 };
 const checkJigyo = async () => {};
 const saveApplication = async ({ requestJson }) => {
     const req = JSON.parse(requestJson);
-    if (!req.applicationId && req.jujishaNo === '1111111') {
-        // 追加モードで登録済みの従事者を登録した場合（サーバ側 7.(3)③a のエラー）
+    // 追加モードで登録済みの従事者を登録した場合（サーバ側 7.(3)③a のエラー）
+    if (!req.applicationId && STUB_APPLICATIONS.some((a) => isSameKey(a.jigyoKey, req.jigyoKey) && a.jujishaNo === req.jujishaNo)) {
         throw { body: { message: 'この従事者の応募情報は既に登録されています。応募情報表示ボタンで登録内容を表示してください。' } };
     }
     return { uketukeNo: 4 };
@@ -263,6 +308,14 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     objectInfos;
 
     // ========== 1. 初期表示 ==========
+    // ※ スタブ：ローカルプレビュー用に遷移元を切り替える（Apex デプロイ後に削除）
+    connectedCallback() {
+        if (STUB_PAGE_STATE.c__from && !this._initialized) {
+            this._initialized = true;
+            this.initialize(STUB_PAGE_STATE);
+        }
+    }
+
     // 【要確認】遷移パラメータの受渡し方式（暫定：URL state）
     @wire(CurrentPageReference)
     wiredPageRef(pageRef) {
