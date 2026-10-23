@@ -336,7 +336,7 @@ export default class Juj081 extends LightningElement {
             return;
         }
         // (2) 保存確認
-        if (!(await LightningConfirm.open({ message: MSG.CONFIRM_SAVE, variant: 'headerless' }))) {
+        if (!(await LightningConfirm.open({ message: MSG.CONFIRM_SAVE, label: '保存確認' }))) {
             return;
         }
         // (3) 保持中の従事可能日をすべて返却する（時間帯が1件もない日付は返却しない）

@@ -45,10 +45,22 @@ const MSG = {
     CONFIRM_OVERWRITE: '入力中の応募情報は破棄されます。よろしいですか？',
     CONFIRM_SAVE: '登録します。よろしいですか？',
     CONFIRM_DELETE: '削除します。よろしいですか？',
-    CONFIRM_DELETE_ALL_2: '本当に全件削除してよろしいですか？',
+    CONFIRM_DELETE_ALL_1: '以下の事業に関する応募情報を全て削除します。この操作は取り消すことは出来ません', // 画面イメージ(ToBe)の文言
+    CONFIRM_DELETE_ALL_2: '応募情報を全て削除します。本当によろしいですか？', // 画面イメージ(ToBe)の文言
     CONFIRM_DISCARD: '未登録の変更があります。破棄してよろしいですか？',
     SAVED: '登録しました。',
     DELETED: '削除しました。'
+};
+
+// 確認ダイアログのタイトル：押下したボタン名＋「確認」
+const TITLE = {
+    SHOW_APPLICATION: '応募情報表示確認',
+    SAVE: '登録確認',
+    DELETE: '削除確認',
+    DELETE_ALL: '全削除確認',
+    CLEAR: 'クリア確認',
+    BACK: '戻る確認',
+    MENU: 'メニュー確認'
 };
 
 // 【要確認】従事経験の値
@@ -491,7 +503,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
             return;
         }
         // (2) 上書き確認
-        if (this.isDirty && !(await this.confirmDialog(MSG.CONFIRM_OVERWRITE))) {
+        if (this.isDirty && !(await this.confirmDialog(MSG.CONFIRM_OVERWRITE, TITLE.SHOW_APPLICATION))) {
             return;
         }
         try {
@@ -653,7 +665,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
             return;
         }
         // (2) 登録確認
-        if (!(await this.confirmDialog(MSG.CONFIRM_SAVE))) {
+        if (!(await this.confirmDialog(MSG.CONFIRM_SAVE, TITLE.SAVE))) {
             return;
         }
         this.isLoading = true;
@@ -688,7 +700,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     async handleDeleteClick() {
         this.clearMessages();
         // (1) 削除確認
-        if (!(await this.confirmDialog(MSG.CONFIRM_DELETE))) {
+        if (!(await this.confirmDialog(MSG.CONFIRM_DELETE, TITLE.DELETE))) {
             return;
         }
         this.isLoading = true;
@@ -715,10 +727,10 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
         // (2) 削除確認（2回）
         const msg1 =
-            `従事事業名：${this.jigyo.jigyoName}\n支部名：${this.jigyo.shibuName}\n` +
-            `従事場所名：${this.basyoName}\n実施年度：${this.jigyoKey.jisiNendo}\n` +
-            'の応募情報をすべて削除します。よろしいですか？';
-        if (!(await this.confirmDialog(msg1)) || !(await this.confirmDialog(MSG.CONFIRM_DELETE_ALL_2))) {
+            `${MSG.CONFIRM_DELETE_ALL_1}\n従事事業名:${this.jigyo.jigyoName}\n支部名:${this.jigyo.shibuName}\n` +
+            `従事場所名:${this.basyoName}\n実施年度:${this.jigyoKey.jisiNendo}`;
+        if (!(await this.confirmDialog(msg1, TITLE.DELETE_ALL)) ||
+            !(await this.confirmDialog(MSG.CONFIRM_DELETE_ALL_2, TITLE.DELETE_ALL))) {
             return;
         }
         this.isLoading = true;
@@ -737,7 +749,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
 
     // ========== 10. クリア・戻る・メニューボタン押下時 ==========
     async handleClearClick() {
-        if (!(await this.confirmDiscard())) {
+        if (!(await this.confirmDiscard(TITLE.CLEAR))) {
             return;
         }
         // ① b. 従事事業メニューから遷移した場合：従事事業キー部も初期化する
@@ -754,7 +766,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     async handleBackClick() {
-        if (!(await this.confirmDiscard())) {
+        if (!(await this.confirmDiscard(TITLE.BACK))) {
             return;
         }
         // ② 【要確認】遷移元への戻り方
@@ -762,7 +774,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     async handleMenuClick() {
-        if (!(await this.confirmDiscard())) {
+        if (!(await this.confirmDiscard(TITLE.MENU))) {
             return;
         }
         // ③ 【要確認】JUJ010 のページ API 名
@@ -773,8 +785,8 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     // 10.(1) 未登録の変更がある場合のみ確認する
-    async confirmDiscard() {
-        return !this.isDirty || this.confirmDialog(MSG.CONFIRM_DISCARD);
+    async confirmDiscard(title) {
+        return !this.isDirty || this.confirmDialog(MSG.CONFIRM_DISCARD, title);
     }
 
     // ========== 11. 共通処理 ==========
@@ -895,8 +907,9 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     // ========== 子画面・ダイアログ・メッセージ ==========
-    confirmDialog(message) {
-        return LightningConfirm.open({ message, variant: 'headerless' });
+    // 確認ダイアログ（タイトル＝押下したボタン名＋「確認」）
+    confirmDialog(message, label) {
+        return LightningConfirm.open({ message, label });
     }
 
     showSuccess(message) {
