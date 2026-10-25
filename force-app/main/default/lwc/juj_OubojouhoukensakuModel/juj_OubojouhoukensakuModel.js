@@ -1,11 +1,12 @@
 /**
  * JUJ082 応募情報検索（JUJ080 の子コンポーネントとしてモーダル表示する）
- * 設計書：JUJ082 応募情報検索 検索処理 v7
- * コメント中の番号は検索処理の章番号に対応する。【要確認】は QA・メタデータの確定後に修正する。
+ * 設計書：機能設計書 処理詳細（JUJ080／081／082 共通シート）
+ * コメント中の番号は「1.画面アクション No.」「3.表示ラベル No.」「4.入力チェック No.」「5.データ更新 (n)」に対応する。
+ * 【要確認】は QA・メタデータの確定後に修正する。
  *
  * 呼出し元（JUJ080）：
- *   <c-juj082 jigyo-key={jigyoKey} jigyo={jigyo} basyo-name={basyoName} key-readonly={isJigyoKeyReadonly}
- *             onselect={...} onclose={...}></c-juj082>
+ *   <c-juj_-oubojouhoukensaku-model jigyo-key={jigyoKey} jigyo={jigyo} basyo-name={basyoName} key-readonly={isJigyoKeyReadonly}
+ *             onselect={...} onclose={...}></c-juj_-oubojouhoukensaku-model>
  * イベント：
  *   select … 応募行の「選択」押下時。detail = { applicationId }
  *   close  … 閉じるボタン押下時
@@ -16,37 +17,44 @@ import { getObjectInfos } from 'lightning/uiObjectInfoApi';
 import getHanyouMasterTaisyoNendo from '@salesforce/apex/Juj_CommonController.getHanyouMasterTaisyoNendo';
 
 // ========== Apex（未デプロイのため一時的にコメントアウト。デプロイ後は import を戻し、下のスタブを削除する）==========
-// import search from '@salesforce/apex/JUJ082Controller.search';
-// import getJigyo from '@salesforce/apex/JUJ082Controller.getJigyo';
-// import getName from '@salesforce/apex/JUJ082Controller.getName';
+// import search from '@salesforce/apex/Juj_OubojouhoukensakuModelController.search';
+// import getJigyo from '@salesforce/apex/Juj_OubojouhoukensakuModelController.getJigyo';
+// import getName from '@salesforce/apex/Juj_OubojouhoukensakuModelController.getName';
 
-// 【要確認 QA-20】メッセージ文言・ID
+// メッセージ。末尾は 4.入力チェックの No.【要確認 QA-20】文言・ID
 const MSG = {
-    RANGE: '範囲指定が正しくありません。', // SYSTEM-5104
+    RANGE: (label) => `${label}(From)は${label}(To)以下の値を入力してください。`, // No.24〜27（項目名は画面の項目ラベル）
+    NENDO_FORMAT: '実施年度は4桁の半角数字（西暦）で入力してください。', // No.28（項目の下に表示）
     UNEXPECTED: '予期しないエラーが発生しました。'
 };
 
-// 項目ラベルの取得元オブジェクト（【要確認】API 名確定後に置換）
-const OBO_OBJECT = '従事事業応募__c'; // 従事事業応募
-const JIGYO_OBJECT = '従事事業__c'; // 従事事業
+// 実施年度：半角数字4桁（西暦）
+const NENDO_PATTERN = /^[0-9]{4}$/;
+
+// 項目ラベルの取得元オブジェクト（3.表示ラベルの「項目ラベル取得元」）
+const OBO_OBJECT = 'Juji_Jigyo_Oubo__c'; // 従事事業応募
+const JIGYO_OBJECT = 'Juji_Jigyo__c'; // 従事事業
+const BASYO_OBJECT = 'Juji_Basyo_Master__c'; // 従事場所マスタ
 const MEMBER_OBJECT = 'Contact'; // 会員（取引先責任者）
-const SODANIN_OBJECT = '相談員__c'; // 相談員マスタ
+const SODANIN_OBJECT = 'Soudanin_Master__c'; // 相談員マスタ
 const OFFICE_OBJECT = 'Account'; // 事務所・法人
 
 // 画面項目 → [オブジェクト, 項目名, 既定ラベル]。ラベルはメタデータから取得し、取得できない場合は既定ラベルを表示する
 // （検索条件・検索結果の列名で共通。列名は検索した項目のオブジェクトから取得する）
 const LABEL_FIELDS = {
-    jujiJigyoNo: [JIGYO_OBJECT, '従事事業No__c', '従事事業No.'],
-    jigyoName: [JIGYO_OBJECT, '従事事業名__c', '従事事業名'],
-    jisiNendo: [JIGYO_OBJECT, '実施年度__c', '実施年度'],
-    shibuCode: [OFFICE_OBJECT, '支部コード__c', '支部コード'],
-    uketukeNo: [OBO_OBJECT, '受付番号__c', '受付番号'],
-    torokuNo: [MEMBER_OBJECT, '登録番号__c', '登録番号'],
-    sodaninNo: [SODANIN_OBJECT, '相談員番号__c', '相談員番号'],
-    name: [SODANIN_OBJECT, '氏名__c', '氏名']
+    jujiJigyoNo: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_No__c', '従事事業No.'],
+    jigyoName: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_Name__c', '従事事業名'],
+    jisiNendo: [JIGYO_OBJECT, 'Juji_Jisi_Nendo__c', '実施年度'],
+    jujiBasyoNo: [BASYO_OBJECT, 'JujM_Juji_Basyo_No__c', '従事場所No.'],
+    basyoName: [BASYO_OBJECT, 'JujM_Juji_Basyo_Name__c', '従事場所名'],
+    shibuCode: [OFFICE_OBJECT, 'Jims_Sibu_Code__c', '支部コード'],
+    uketukeNo: [OBO_OBJECT, 'Oubo_Uketuke_No__c', '受付番号'],
+    torokuNo: [MEMBER_OBJECT, 'Kaii_Toroku_No__c', '登録番号'],
+    sodaninNo: [SODANIN_OBJECT, 'SouM_Sodanin_No__c', '相談員番号'],
+    name: [SODANIN_OBJECT, 'SouM_Sodanin_Name__c', '氏名']
 };
 
-// From／To の組（画面項目名, 数値比較か）。エラーメッセージには画面項目のラベルを使用する
+// 4.入力チェック No.24〜27 From／To の組（画面項目名, 数値比較か）。エラーメッセージには画面項目のラベルを使用する
 const RANGES = [
     ['uketukeNo', true],
     ['torokuNo', false],
@@ -54,15 +62,15 @@ const RANGES = [
     ['sodaninNo', false]
 ];
 
-// 番号 → 名称取得の種別（Apex の getName の nameType）
+// 番号 → 名称取得の種別（Apex の getName の nameType。画面アクション No.39）
 const NAME_TYPES = {
     torokuNo: 'TOROKU', // 登録番号 → 会員氏名
     shibuCode: 'SHIBU', // 支部コード → 支部名
     sodaninNo: 'SODANIN' // 相談員番号 → 相談員氏名
 };
 
-// 検索結果の列（【要確認】検索結果項目一覧の提供後に見直す。暫定：現行 WLP008 と同じ列）
-// 列名は labels を設定する。従事場所No.・従事場所名・登録日時は固定
+// 検索結果の列（3.表示ラベル No.87〜97。現行 WLP008 と同じ列）
+// 列名は labels を設定する。登録日時は固定
 const buildColumns = (labels) => [
     {
         type: 'button',
@@ -75,8 +83,8 @@ const buildColumns = (labels) => [
     { label: labels.name, fieldName: 'name', sortable: true },
     { label: labels.jujiJigyoNo, fieldName: 'jujiJigyoNo', sortable: true },
     { label: labels.jigyoName, fieldName: 'jigyoName', sortable: true },
-    { label: '従事場所No.', fieldName: 'jujiBasyoNo', sortable: true },
-    { label: '従事場所名', fieldName: 'basyoName', sortable: true },
+    { label: labels.jujiBasyoNo, fieldName: 'jujiBasyoNo', sortable: true },
+    { label: labels.basyoName, fieldName: 'basyoName', sortable: true },
     { label: labels.jisiNendo, fieldName: 'jisiNendo', sortable: true },
     { label: '登録日時', fieldName: 'createdDate', sortable: true }
 ];
@@ -155,7 +163,7 @@ const getJigyo = async (key) => {
 const getName = async ({ nameType, code }) => (STUB_NAMES[nameType] || {})[code] || null;
 // ========== スタブ ここまで ==========
 
-export default class Juj082 extends LightningElement {
+export default class JujOubojouhoukensakuModel extends LightningElement {
     // 呼出し元（JUJ080）からの引継ぎ
     @api jigyoKey; // { jujiJigyoNo, jujiBasyoNo, jisiNendo }
     @api jigyo; // 呼出し元で取得済みの事業 { jigyoName, shibuCode, shibuName }
@@ -184,7 +192,7 @@ export default class Juj082 extends LightningElement {
     subScreenLevel = SUB_SCREEN_LEVEL;
 
     // 項目ラベル取得用のオブジェクト情報
-    objectApiNames = [OBO_OBJECT, JIGYO_OBJECT, MEMBER_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
+    objectApiNames = [OBO_OBJECT, JIGYO_OBJECT, BASYO_OBJECT, MEMBER_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
     objectInfos;
     // 検索結果の列（初期は既定ラベル。オブジェクト情報の取得後に列名を設定し直す）
     // ※ 再描画のたびに列定義を作り直すと、列幅・折り返し等の設定がリセットされるため、取得時のみ設定する
@@ -196,7 +204,7 @@ export default class Juj082 extends LightningElement {
         this.columns = buildColumns(this.labels);
     }
 
-    // ========== 初期表示 ==========
+    // ========== No.35 画面初期化 ==========
     connectedCallback() {
         this.initKey();
     }
@@ -208,7 +216,7 @@ export default class Juj082 extends LightningElement {
         this.prevKey = { ...this.key };
         this.currentJigyo = { ...(this.jigyo || {}) };
         this.currentBasyoName = this.basyoName || '';
-        // 実施年度が空白の場合、汎用マスタの対象年度を初期値とする（従事事業メニューから遷移した場合のみ）
+        // 従事事業メニューから遷移し、実施年度が空白の場合は、汎用マスタの対象年度を設定して No.36 と同じ処理を行う
         if (!this.keyReadonly && !this.key.jisiNendo) {
             this.setDefaultNendo();
         }
@@ -226,23 +234,27 @@ export default class Juj082 extends LightningElement {
         }
     }
 
-    // ========== 従事事業キー変更時（フォーカスアウト） ==========
+    // ========== No.36 従事事業No.／従事場所No.／実施年度のフォーカスアウト ==========
     handleKeyBlur(event) {
         const field = event.target.dataset.field; // jujiJigyoNo / jujiBasyoNo / jisiNendo
         this.key = { ...this.key, [field]: event.target.value };
+        // 実施年度の形式エラー（No.28）は次の検索ボタン押下まで表示しない
+        if (field === 'jisiNendo') {
+            this.clearNendoError();
+        }
         this.onKeyChanged();
     }
 
     async onKeyChanged() {
         await this.loadJigyo();
-        // 従事事業キーが変わった場合、検索結果は前の事業のものとなるため消去する
+        // 従事事業キーの3項目のいずれかが変わった場合、検索結果を消去する
         if (!this.isSameKey(this.key, this.prevKey)) {
             this.searchData = [];
         }
         this.prevKey = { ...this.key };
     }
 
-    // 事業の取得（JUJ080 2.(1) と同じ）
+    // 従事場所名・従事事業の取得（JUJ080 No.2・No.18 と同じ。最終受付番号・入力制御は行わない）
     async loadJigyo() {
         const { jujiJigyoNo, jujiBasyoNo, jisiNendo } = this.key;
         // 従事場所No が変わっていない場合、従事場所名は再設定しない（表示のちらつき防止）
@@ -275,7 +287,8 @@ export default class Juj082 extends LightningElement {
         this.condition = { ...this.condition, [field]: event.detail.value };
     }
 
-    // 登録番号・支部コード・相談員番号のフォーカスアウト：横に名称を表示する（取得できない場合は空白）
+    // ========== No.39 登録番号／支部コード／相談員番号（From・To）のフォーカスアウト ==========
+    // 横に名称を表示する（未入力・取得できない場合は空白）
     async handleNoBlur(event) {
         const field = event.target.dataset.field; // 例：torokuNoFrom
         const code = event.target.value;
@@ -288,18 +301,20 @@ export default class Juj082 extends LightningElement {
         }
     }
 
-    // ========== 1. 検索ボタン押下時 ==========
+    // ========== No.42 検索ボタン押下：5.データ更新 (7) ==========
     async handleSearchAction() {
         this.headerMessages = [];
-        // (1) 入力チェック：From ＞ To の場合はエラー（複数項目の関連チェックのため頭部に表示）
-        if (!this.validateRanges()) {
+        // 4.入力チェック No.24〜28（すべてチェックしてから表示する）
+        const isRangeValid = this.validateRanges();
+        const isNendoValid = this.validateNendoFormat();
+        if (!isRangeValid || !isNendoValid) {
             return;
         }
         this.isLoading = true;
         try {
-            // (2)〜(7) 検索（従事事業が取得できない場合はサーバ側で 0件を返す）
+            // 応募の検索（従事事業キーが未入力、または従事事業が存在しない場合はサーバ側で 0件を返す）
             const result = await search({ conditionJson: JSON.stringify(this.buildCondition()) });
-            // (5) 従事事業No・従事事業名・従事場所No・従事場所名・実施年度は画面の値を設定する
+            // 従事事業No.・従事事業名・従事場所No.・従事場所名・実施年度は画面の値を設定する
             this.searchData = result.map((row) => ({
                 ...row,
                 jujiJigyoNo: this.key.jujiJigyoNo,
@@ -317,7 +332,7 @@ export default class Juj082 extends LightningElement {
         }
     }
 
-    // (1) From／To の範囲チェック
+    // No.24〜27 相関（区間）チェック：From ＞ To の場合はエラー（画面頭部にまとめて表示）
     validateRanges() {
         const c = this.condition;
         const labels = this.labels;
@@ -328,9 +343,34 @@ export default class Juj082 extends LightningElement {
                 return false;
             }
             return isNumber ? Number(from) > Number(to) : from > to;
-        }).map(([key]) => `${labels[key]}：${MSG.RANGE}`);
+        }).map(([key]) => MSG.RANGE(labels[key]));
         this.headerMessages = errors;
         return errors.length === 0;
+    }
+
+    // No.28 実施年度：入力可（従事事業メニューから遷移）で、半角数字4桁（西暦）以外の場合はエラー（項目の下に表示）
+    // ※ 未入力はエラーとしない（検索結果0件）
+    validateNendoFormat() {
+        const nendo = this.key.jisiNendo;
+        const isValid = this.keyReadonly || !nendo || NENDO_PATTERN.test(nendo);
+        const el = this.nendoInput;
+        if (el) {
+            el.setCustomValidity(isValid ? '' : MSG.NENDO_FORMAT);
+            el.reportValidity();
+        }
+        return isValid;
+    }
+
+    clearNendoError() {
+        const el = this.nendoInput;
+        if (el) {
+            el.setCustomValidity('');
+            el.reportValidity();
+        }
+    }
+
+    get nendoInput() {
+        return this.template.querySelector('lightning-input[data-field="jisiNendo"]');
     }
 
     // サーバへ渡す検索条件
@@ -350,7 +390,7 @@ export default class Juj082 extends LightningElement {
         };
     }
 
-    // ========== 検索結果の並替え（画面内で並び替える） ==========
+    // ========== No.43 検索結果の並べ替え（画面内で並べ替え、再検索は行わない。空白は末尾） ==========
     handleSort(event) {
         const { fieldName, sortDirection } = event.detail;
         const sign = sortDirection === 'asc' ? 1 : -1;
@@ -368,7 +408,7 @@ export default class Juj082 extends LightningElement {
         this.sortDirection = sortDirection;
     }
 
-    // ========== 行選択：選択した応募の ID を呼出し元に返す ==========
+    // ========== No.44 選択ボタン（検索結果の行）：選択した応募の応募IDを JUJ080 に返す ==========
     handleRowAction(event) {
         if (event.detail.action.name === 'select_row') {
             const applicationId = event.detail.row.applicationId;
@@ -376,7 +416,7 @@ export default class Juj082 extends LightningElement {
         }
     }
 
-    // ========== 検索ボタン（共通子画面） ==========
+    // ========== No.37・38・40・41 検索ボタン（共通子画面 JUJ110・JUJ120・JUJ130・JUJ150） ==========
     // 【要確認】JUJ110・120・130・140・150（共通担当）の組込み方。接続までは仮表示とする
     // 検索条件の初期値は渡さない。フォーカスアウトと同じ契機のため、メッセージは消去しない
     handleSubSearchClick(event) {
@@ -427,8 +467,8 @@ export default class Juj082 extends LightningElement {
         this.names = { ...this.names, [field]: toText(name) };
     }
 
-    // ========== クリア・閉じる ==========
-    // 画面を初期表示の状態に戻す
+    // ========== No.45 クリアボタン押下 ==========
+    // 画面を開いた時の状態に戻す
     // ※ 従事事業キー部は呼出し元から引き継いだ値に戻す（従事事業基本情報から遷移した場合は入力不可のため変わらない。
     //   従事事業メニューから遷移した場合は入力した値を破棄し、実施年度が空白なら汎用マスタの対象年度を設定する）
     handleClearSearch() {
@@ -439,8 +479,10 @@ export default class Juj082 extends LightningElement {
         this.sortBy = undefined;
         this.sortDirection = undefined;
         this.headerMessages = [];
+        this.clearNendoError();
     }
 
+    // ========== No.46 閉じるボタン押下：JUJ080 に返さずに画面を閉じる ==========
     closeSearchModal() {
         this.dispatchEvent(new CustomEvent('close'));
     }
@@ -462,7 +504,7 @@ export default class Juj082 extends LightningElement {
     }
 
     // ========== Getter ==========
-    // 従事事業キー：従事事業基本情報から遷移した場合は入力不可、検索ボタン非表示
+    // 3.表示ラベル No.71・76・79 従事事業キー：従事事業基本情報から遷移した場合は入力不可、検索ボタン非表示
     get isInputDisabled() {
         return this.keyReadonly;
     }
@@ -496,7 +538,7 @@ export default class Juj082 extends LightningElement {
         return this.subScreenId === SUB_SODANIN;
     }
 
-    // ========== Getter（項目ラベル） ==========
+    // ========== Getter（3.表示ラベル） ==========
     // 画面項目のラベル（メタデータから取得。取得できない場合は既定ラベル）
     get labels() {
         const labels = {};

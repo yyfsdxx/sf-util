@@ -1,15 +1,16 @@
 /**
  * JUJ081 従事可能日指定（JUJ080 の子コンポーネントとしてモーダル表示する）
- * 設計書：JUJ081 従事可能日指定 処理詳細 v5（2026/10/16 時間帯対応）
- * コメント中の番号は処理詳細の章番号に対応する。【要確認】は QA・メタデータの確定後に修正する。
+ * 設計書：機能設計書 処理詳細（JUJ080／081／082 共通シート）
+ * コメント中の番号は「1.画面アクション No.」「3.表示ラベル No.」「4.入力チェック No.」「5.データ更新 (n)」に対応する。
+ * 【要確認】は QA・メタデータの確定後に修正する。
  *
  * ※ 本画面は DB を更新しない。保存時に選択した従事可能日を JUJ080 へ返却する。
  * ※ 従事可能日は時間帯単位で選択する。形式：[{ kanoubiDate: 'yyyy-MM-dd', timeSlots: [{ startTime, endTime }] }]
  *   時間帯の同一判定は「開始時間＋終了時間」で行う。
  *
  * 呼出し元（JUJ080）：
- *   <c-juj081 jigyo-key={jigyoKey} jujisha-no={jujishaNo} kanoubi-dates={kanoubiDates}
- *             onsave={...} onclose={...}></c-juj081>
+ *   <c-juj_-jyujijigyou-jisshibi-shitei jigyo-key={jigyoKey} jujisha-no={jujishaNo} kanoubi-dates={kanoubiDates}
+ *             onsave={...} onclose={...}></c-juj_-jyujijigyou-jisshibi-shitei>
  * イベント：
  *   save  … 保存時。detail = { kanoubiDates }
  *   close … 閉じる時。初期表示エラーで閉じる場合は detail = { errorMessage }
@@ -19,19 +20,19 @@ import LightningConfirm from 'lightning/confirm';
 import { getObjectInfos } from 'lightning/uiObjectInfoApi';
 
 // ========== Apex（未デプロイのため一時的にコメントアウト。デプロイ後は import を戻し、下のスタブを削除する）==========
-// import init from '@salesforce/apex/JUJ081Controller.init';
-// import getDays from '@salesforce/apex/JUJ081Controller.getDays';
-// import checkSave from '@salesforce/apex/JUJ081Controller.checkSave';
+// import init from '@salesforce/apex/Juj_JyujijigyouJisshibiShiteiController.init';
+// import getDays from '@salesforce/apex/Juj_JyujijigyouJisshibiShiteiController.getDays';
+// import checkSave from '@salesforce/apex/Juj_JyujijigyouJisshibiShiteiController.checkSave';
 
-// 【要確認 QA-20】メッセージ文言・ID
+// メッセージ【要確認 QA-20】文言・ID
 const MSG = {
-    NO_JISSHIBI: '実施日が登録されていません。',
+    NO_JISSHIBI: '実施日が登録されていません。', // No.21 実施日が1件も登録されていない場合
     CONFIRM_SAVE:
         '保存します。よろしいですか？\n※この時点では応募は確定されません。応募を確定するには元画面で登録ボタンを押下してください。', // WLP009-0004
     UNEXPECTED: '予期しないエラーが発生しました。'
 };
 
-// 行の区分（CSS クラス）
+// 行の区分（CSS クラス。3.表示ラベル No.60 の備考）
 const ROW_WARIATE = 'row-status-waritate'; // 割当
 const ROW_BOSHU = 'row-status-oubo'; // 募集
 const CHILD_ROW = 'child-row'; // 時間帯行（統一のスタイル）
@@ -42,21 +43,29 @@ const CELL_WRAP = 'cell-wrap';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
-// 項目ラベルの取得元オブジェクト（【要確認】API 名確定後に置換）
-const JIGYO_OBJECT = '従事事業__c'; // 従事事業
-const SODANIN_OBJECT = '相談員__c'; // 相談員マスタ（氏名のラベル取得元。JUJ080 と同じ）
+// 項目ラベルの取得元オブジェクト（3.表示ラベルの「項目ラベル取得元」）
+const JIGYO_OBJECT = 'Juji_Jigyo__c'; // 従事事業
+const BASYO_OBJECT = 'Juji_Basyo_Master__c'; // 従事場所マスタ
+const SODANIN_OBJECT = 'Soudanin_Master__c'; // 相談員マスタ（氏名のラベル取得元。JUJ080 と同じ）
 const OFFICE_OBJECT = 'Account'; // 事務所・法人
 
 // 画面項目 → [オブジェクト, 項目名, 既定ラベル]。ラベルはメタデータから取得し、取得できない場合は既定ラベルを表示する
 // （一覧の列名はオブジェクトの項目と異なるため固定）
 const LABEL_FIELDS = {
-    jujiJigyoNo: [JIGYO_OBJECT, '従事事業No__c', '従事事業No.'],
-    jigyoName: [JIGYO_OBJECT, '従事事業名__c', '従事事業名'],
-    jisiNendo: [JIGYO_OBJECT, '実施年度__c', '実施年度'],
-    shibuCode: [OFFICE_OBJECT, '支部コード__c', '支部コード'],
-    jujishaName: [SODANIN_OBJECT, '氏名__c', '氏名']
+    jujiJigyoNo: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_No__c', '従事事業No.'],
+    jigyoName: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_Name__c', '従事事業名'],
+    jisiNendo: [JIGYO_OBJECT, 'Juji_Jisi_Nendo__c', '実施年度'],
+    jujiBasyoNo: [BASYO_OBJECT, 'JujM_Juji_Basyo_No__c', '従事場所No.'],
+    basyoName: [BASYO_OBJECT, 'JujM_Juji_Basyo_Name__c', '従事場所名'],
+    shibuCode: [OFFICE_OBJECT, 'Jims_Sibu_Code__c', '支部コード'],
+    shibuName: [OFFICE_OBJECT, 'Jims_Sibu_Name__c', '支部名'],
+    jujishaName: [SODANIN_OBJECT, 'SouM_Sodanin_Name__c', '氏名']
 };
-const MONTH_STEP = 2; // 前2カ月・次2カ月
+
+// 項目ラベル取得元が「固定」の項目
+const FIXED_LABELS = {
+    jujishaNo: '登録番号/相談員番号'
+};
 
 // ========== スタブ（Apex デプロイ後に削除）==========
 const init = async () => ({
@@ -98,8 +107,6 @@ const addMonths = (ym, n) => {
     d.setUTCMonth(d.getUTCMonth() + n);
     return toDateText(d).slice(0, 7);
 };
-// 表示年月は偶数月とする（奇数月の場合は前月）。表示期間は偶数月とその翌月の2カ月
-const toEvenMonth = (ym) => (Number(ym.slice(5, 7)) % 2 === 0 ? ym : addMonths(ym, -1));
 const todayText = () => {
     const now = new Date();
     return toDateText(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
@@ -129,7 +136,7 @@ const toKanoubiDates = (selection) =>
         .sort()
         .map((date) => ({ kanoubiDate: date, timeSlots: [...selection[date]].sort().map(keyToSlot) }));
 
-export default class Juj081 extends LightningElement {
+export default class JujJyujijigyouJisshibiShitei extends LightningElement {
     // 呼出し元（JUJ080）からの引継ぎ
     @api jigyoKey; // { jujiJigyoNo, jujiBasyoNo, jisiNendo }
     @api jujishaNo;
@@ -150,18 +157,18 @@ export default class Juj081 extends LightningElement {
     noJisshibi = false;
 
     // 項目ラベル取得用のオブジェクト情報
-    objectApiNames = [JIGYO_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
+    objectApiNames = [JIGYO_OBJECT, BASYO_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
     @wire(getObjectInfos, { objectApiNames: '$objectApiNames' })
     objectInfos;
 
-    // ========== 1. 初期表示 ==========
+    // ========== No.21 画面初期化 ==========
     async connectedCallback() {
         const key = this.jigyoKey || {};
         this.isLoading = true;
         try {
-            // (2) 従事事業・従事者・本人割当済の時間帯・実施日の範囲
+            // 従事事業・従事者・本人割当済の時間帯・実施日の範囲（最も早い実施日・最も遅い実施日）を取得する
             const result = await init({ ...key, jujishaNo: this.jujishaNo });
-            // (1) 引継ぎ項目の表示
+            // ヘッダー部の表示
             this.headerData = {
                 jujiJigyoNo: key.jujiJigyoNo,
                 jujiJigyoMei: result.jigyo.jigyoName,
@@ -173,7 +180,7 @@ export default class Juj081 extends LightningElement {
                 jujishaNo: this.jujishaNo,
                 shiMei: result.jujishaName
             };
-            // (2)③ 本人割当済の時間帯は保持中の従事可能日に追加する
+            // 本人割当済の時間帯のうち、受け取った従事可能日に含まれないものを追加して選択状態とする
             this.ownAssigned = toSelection(result.ownAssigned);
             const selection = toSelection(this.kanoubiDates);
             Object.keys(this.ownAssigned).forEach((date) => {
@@ -182,42 +189,43 @@ export default class Juj081 extends LightningElement {
             this.selection = selection;
             this.initialSelection = JSON.parse(JSON.stringify(selection));
 
-            // (3)② 実施日がない場合はメッセージを表示し、閉じるボタン以外を非活性とする
+            // 実施日が1件も登録されていない場合：メッセージを表示し、閉じるボタン以外の項目・ボタンをすべて非活性とする
             if (!result.minJisshibi) {
                 this.noJisshibi = true;
                 this.headerMessages = [MSG.NO_JISSHIBI];
                 return;
             }
-            // 2.(1)② 移動可能な範囲：最も早い実施日〜最も遅い実施日を含む表示期間（偶数月）
-            this.minMonth = toEvenMonth(result.minJisshibi.slice(0, 7));
-            this.maxMonth = toEvenMonth(result.maxJisshibi.slice(0, 7));
-            // (3)③ 表示年月の初期値（偶数月とし、移動可能な範囲に収める）
+            // 3.表示ラベル No.54 表示年月の移動可能な範囲：最も早い実施日の年月〜最も遅い実施日の年月
+            this.minMonth = result.minJisshibi.slice(0, 7);
+            this.maxMonth = result.maxJisshibi.slice(0, 7);
+            // 表示年月の初期値：最も早い実施日がシステム日付より後の場合は最も早い実施日の年月、それ以外はシステム日付の年月
+            // （範囲外の場合は範囲の開始または終了）
             const today = todayText();
-            this.selectedMonth = this.toMonthInRange(toEvenMonth((result.minJisshibi > today ? result.minJisshibi : today).slice(0, 7)));
-            // (4) 一覧の表示
+            this.selectedMonth = this.toMonthInRange((result.minJisshibi > today ? result.minJisshibi : today).slice(0, 7));
+            // No.34 一覧表示
             await this.loadDays();
         } catch (error) {
-            // (2)①② 従事事業・従事者が取得できない場合はエラーとし、画面を閉じる（JUJ080 でメッセージを表示する）
+            // 従事事業・従事者を取得できなかった場合：画面を閉じ、JUJ080 の画面頭部にエラーメッセージを表示する
             this.dispatchEvent(new CustomEvent('close', { detail: { errorMessage: this.errorText(error) } }));
         } finally {
             this.isLoading = false;
         }
     }
 
-    // ========== 2. 表示年月の変更時 ==========
+    // ========== No.22 前月ボタン押下・No.23 次月ボタン押下・No.24 表示年月の選択 ==========
     handlePrevMonth() {
-        this.changeMonth(addMonths(this.selectedMonth, -MONTH_STEP));
+        this.changeMonth(addMonths(this.selectedMonth, -1));
     }
 
     handleNextMonth() {
-        this.changeMonth(addMonths(this.selectedMonth, MONTH_STEP));
+        this.changeMonth(addMonths(this.selectedMonth, 1));
     }
 
     handleMonthChange(event) {
         this.changeMonth(event.detail.value);
     }
 
-    // (1) 表示年月の変更（移動可能な範囲内に収める）(2) 一覧の表示（保持中の従事可能日は変更しない）
+    // 表示年月を変更し（移動可能な範囲内に収める）、No.34 一覧表示を呼び出す（保持中の従事可能日は変更しない）
     changeMonth(ym) {
         const month = this.toMonthInRange(ym);
         if (month === this.selectedMonth) {
@@ -235,7 +243,8 @@ export default class Juj081 extends LightningElement {
         return ym > this.maxMonth ? this.maxMonth : ym;
     }
 
-    // 4.(1) 表示期間（表示年月の1日〜翌月末日）の実施日を取得する
+    // ========== No.34 一覧表示呼び出し ==========
+    // 表示期間（表示年月の1日〜末日）の実施日・割当人数を取得する（5.データ更新 (6)）
     async loadDays() {
         this.isLoading = true;
         try {
@@ -252,8 +261,8 @@ export default class Juj081 extends LightningElement {
         }
     }
 
-    // ========== 選択 ==========
-    // 日付行：ON でその日の選択可能な時間帯をすべて追加、OFF ですべて削除（本人割当済を除く）
+    // ========== No.25 選択チェックボックス（日付行） ==========
+    // ON でその日の選択可能な時間帯をすべて追加、OFF ですべて削除（本人割当済を除く）
     handleRowCheck(event) {
         const date = event.target.dataset.id;
         const day = this.days[date];
@@ -264,7 +273,8 @@ export default class Juj081 extends LightningElement {
         this.setDaySelection(date, keys);
     }
 
-    // 時間帯行：ON で追加、OFF で削除
+    // ========== No.26 選択チェックボックス（時間帯行） ==========
+    // ON で追加、OFF で削除
     handleSubRowCheck(event) {
         const { date, key } = event.target.dataset;
         const current = new Set(this.selection[date] || []);
@@ -276,7 +286,8 @@ export default class Juj081 extends LightningElement {
         this.setDaySelection(date, [...current]);
     }
 
-    // 全選択（一覧ヘッダー）：ON で表示期間内の選択可能な時間帯をすべて追加、OFF ですべて削除（本人割当済を除く）
+    // ========== No.27 全選択チェックボックス（一覧ヘッダー） ==========
+    // ON で表示期間内の選択可能な時間帯をすべて追加、OFF ですべて削除（本人割当済を除く）
     // ※ 表示月チェックオフボタンは本チェックボックスと重複するため廃止（2026/10/16）
     handleMasterCheck(event) {
         const checked = event.target.checked;
@@ -287,12 +298,14 @@ export default class Juj081 extends LightningElement {
         this.selection = selection;
     }
 
-    // 全チェックオフ：保持中の従事可能日をすべて削除する（本人割当済を除く）
+    // ========== No.31 全チェックオフボタン押下 ==========
+    // 保持中の従事可能日をすべて削除する（表示期間外の月を含む。本人割当済を除く）
     handleAllCheckOff() {
         this.selection = JSON.parse(JSON.stringify(this.ownAssigned));
     }
 
-    // クリア：保持中の従事可能日を初期値に戻す
+    // ========== No.32 クリアボタン押下 ==========
+    // 選択状態を画面を開いた時の状態（JUJ080 から受け取った従事可能日＋本人割当済の時間帯）に戻す
     handleClear() {
         this.selection = JSON.parse(JSON.stringify(this.initialSelection));
         this.headerMessages = [];
@@ -307,13 +320,13 @@ export default class Juj081 extends LightningElement {
         return [...new Set([...keys, ...(this.ownAssigned[date] || [])])];
     }
 
-    // ========== 時間帯行の展開・折りたたみ（初期表示は折りたたみ） ==========
+    // ========== No.28 展開ボタン（日付行）：時間帯行の表示／非表示（初期表示は非表示） ==========
     handleToggleExpand(event) {
         const date = event.currentTarget.dataset.id;
         this.expanded = { ...this.expanded, [date]: !this.expanded[date] };
     }
 
-    // ========== 列ヘッダーメニュー ==========
+    // ========== No.29 列ヘッダーメニュー ==========
     handleWrapText() {
         this.textStyleClass = CELL_WRAP;
     }
@@ -325,24 +338,25 @@ export default class Juj081 extends LightningElement {
     // 列幅の変更（未実装）
     handleMouseDown() {}
 
-    // ========== 3. 保存ボタン押下時 ==========
+    // ========== No.30 保存ボタン押下 ==========
     async handleSave() {
         this.headerMessages = [];
-        // (1) 一括割当実行中の場合はエラー
+        // 4.入力チェック No.23 一括割当実行中の場合はエラー
         try {
             await checkSave({ ...this.jigyoKey });
         } catch (error) {
             this.showError(error);
             return;
         }
-        // (2) 保存確認
+        // 確認ダイアログ
         if (!(await LightningConfirm.open({ message: MSG.CONFIRM_SAVE, label: '保存確認' }))) {
             return;
         }
-        // (3) 保持中の従事可能日をすべて返却する（時間帯が1件もない日付は返却しない）
+        // 保持中の従事可能日（日付と時間帯）を JUJ080 に返し、画面を閉じる（時間帯が1件もない日付は返さない。DB は更新しない）
         this.dispatchEvent(new CustomEvent('save', { detail: { kanoubiDates: toKanoubiDates(this.selection) } }));
     }
 
+    // ========== No.33 閉じるボタン押下：JUJ080 に返さずに画面を閉じる ==========
     handleClose() {
         this.dispatchEvent(new CustomEvent('close', { detail: {} }));
     }
@@ -364,30 +378,30 @@ export default class Juj081 extends LightningElement {
     }
 
     // ========== Getter ==========
-    // 表示期間：表示年月の1日〜翌月の末日
+    // 表示期間：表示年月の1日〜末日（3.表示ラベル No.54）
     get periodFrom() {
         return `${this.selectedMonth}-01`;
     }
 
     get periodTo() {
-        const end = firstOfMonth(addMonths(this.selectedMonth, MONTH_STEP));
-        end.setUTCDate(0); // 翌月の末日
+        const end = firstOfMonth(addMonths(this.selectedMonth, 1));
+        end.setUTCDate(0); // 表示年月の末日
         return toDateText(end);
     }
 
-    // 表示年月の選択肢（移動可能な範囲の偶数月）
+    // 表示年月の選択肢（移動可能な範囲内の各年月）
     get monthOptions() {
         const options = [];
         if (!this.minMonth) {
             return options;
         }
-        for (let ym = this.minMonth; ym <= this.maxMonth; ym = addMonths(ym, MONTH_STEP)) {
+        for (let ym = this.minMonth; ym <= this.maxMonth; ym = addMonths(ym, 1)) {
             options.push({ label: `${ym.slice(0, 4)}年${ym.slice(5, 7)}月`, value: ym });
         }
         return options;
     }
 
-    // 4.(1)(2) 一覧の行（日付行＋時間帯行）
+    // No.34 一覧の行（表示期間内の全日付の日付行＋時間帯行）
     get calendarRows() {
         if (!this.selectedMonth || this.noJisshibi) {
             return [];
@@ -404,7 +418,7 @@ export default class Juj081 extends LightningElement {
         const day = this.days[date];
         const selected = new Set(this.selection[date] || []);
         const own = new Set(this.ownAssigned[date] || []);
-        // ④ 時間帯行
+        // 時間帯行（実施日の時間帯ごと）
         const subRows = (day ? day.timeSlots : []).map((slot, i) => {
             const key = slotKey(slot);
             return {
@@ -415,10 +429,10 @@ export default class Juj081 extends LightningElement {
                 endTime: slot.endTime,
                 boshuNinzu: slot.count,
                 wariateNinzu: slot.wariateNinzu,
-                // 4.(2)① 時間帯行は区分による色付けをせず、統一のスタイルとする（従事事業実施日登録と同様）
+                // 時間帯行は区分による色付けをせず、統一のスタイルとする（3.表示ラベル No.60）
                 rowClass: CHILD_ROW,
                 isSelected: selected.has(key),
-                // ④ 本人割当済の時間帯は選択不可
+                // 本人割当済の時間帯は選択状態のまま選択不可（3.表示ラベル No.58）
                 isDisabled: own.has(key)
             };
         });
@@ -427,18 +441,18 @@ export default class Juj081 extends LightningElement {
             id: date,
             dayLabel: date.replace(/-/g, '/'),
             youbi: WEEKDAYS[weekday],
-            // ⑤ 日曜・祝日は赤字、土曜は青字（【要確認 QA-05⑥】祝日は未対応）
+            // 日曜日・祝日は赤字、土曜日は青字（3.表示ラベル No.61。【要確認 QA-05⑥】祝日は未対応）
             youbiClass: weekday === 0 ? YOUBI_SUNDAY : weekday === 6 ? YOUBI_SATURDAY : '',
             boshuNinzu: day ? day.boshuNinzu : null,
             wariateNinzu: day ? day.wariateNinzu : null,
             startTime: day ? day.startTime : null,
             endTime: day ? day.endTime : null,
             biko: day ? day.biko : null,
-            // 4.(2)② 日付行の区分：時間帯に「割当」が1件以上 → 割当、実施日あり → 募集、実施日なし → 色付けなし
+            // 日付行の区分（3.表示ラベル No.60）：割当人数が1以上の時間帯あり → 割当、実施日あり → 募集、実施日なし → 色付けなし
             rowClass: !day ? '' : subRows.some((s) => s.wariateNinzu > 0) ? ROW_WARIATE : ROW_BOSHU,
-            // 4.(1)⑥ 時間帯が1件以上選択されていれば選択状態
+            // 時間帯が1件以上選択されていれば選択状態（3.表示ラベル No.57）
             isSelected: subRows.some((s) => s.isSelected),
-            // ③④ 実施日なし、またはすべての時間帯が本人割当済の場合は選択不可
+            // 実施日なし、またはすべての時間帯が本人割当済の場合は選択不可（3.表示ラベル No.57）
             isDisabled: !day || subRows.every((s) => s.isDisabled),
             hasSubRows: subRows.length > 0,
             isExpanded,
@@ -447,7 +461,7 @@ export default class Juj081 extends LightningElement {
         };
     }
 
-    // 全選択チェックボックス：表示期間内の選択可能な時間帯がすべて選択されている場合 ON
+    // No.27 全選択チェックボックス：表示期間内の選択可能な時間帯がすべて選択されている場合 ON
     get isAllSelected() {
         const selectable = [];
         Object.values(this.days).forEach((day) => {
@@ -456,8 +470,8 @@ export default class Juj081 extends LightningElement {
         return selectable.length > 0 && selectable.every(([date, key]) => (this.selection[date] || []).includes(key));
     }
 
+    // No.22・No.23 前月・次月：表示年月が移動可能な範囲の開始・終了の場合は非活性
     // 実施日がない場合は閉じるボタン以外を非活性とする
-    // 前2カ月・次2カ月：移動すると範囲を超える場合は非活性
     get isPrevDisabled() {
         return this.isActionDisabled || this.selectedMonth <= this.minMonth;
     }
@@ -474,10 +488,10 @@ export default class Juj081 extends LightningElement {
         return this.headerMessages.length > 0;
     }
 
-    // ========== Getter（項目ラベル） ==========
-    // 画面項目のラベル（メタデータから取得。取得できない場合は既定ラベル）
+    // ========== Getter（3.表示ラベル） ==========
+    // 画面項目のラベル（メタデータから取得。取得できない場合は既定ラベル。取得元が「固定」の項目は固定値）
     get labels() {
-        const labels = {};
+        const labels = { ...FIXED_LABELS };
         Object.entries(LABEL_FIELDS).forEach(([key, [objectApiName, field, defaultLabel]]) => {
             const fieldInfo = this.getFieldInfos(objectApiName)[field];
             labels[key] = fieldInfo ? fieldInfo.label : defaultLabel;

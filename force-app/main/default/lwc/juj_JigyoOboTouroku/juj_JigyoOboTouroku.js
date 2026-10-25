@@ -1,7 +1,8 @@
 /**
  * JUJ080 従事事業応募登録
- * 設計書：JUJ080 処理詳細 v9・処理項目一覧
- * コメント中の番号は処理詳細の章番号に対応する。【要確認】は html・メタデータ・QA の確定後に修正する。
+ * 設計書：機能設計書 処理詳細（JUJ080／081／082 共通シート）
+ * コメント中の番号は「1.画面アクション No.」「3.表示ラベル No.」「4.入力チェック No.」「5.データ更新 (n)」に対応する。
+ * 【要確認】は html・メタデータ・QA の確定後に修正する。
  *
  * ※ jujisha・jigyo は html から直接参照する（jujisha.name 等）ため null を代入しない。
  *   未取得時は空オブジェクト {} とし、判定には hasJujisha / hasJigyo を使用する。
@@ -15,13 +16,13 @@ import { getObjectInfos } from 'lightning/uiObjectInfoApi';
 // ========== Apex（未実装のため一時的にコメントアウト。実装後は import を戻し、下のスタブを削除する）==========
 // ※ Apex の引数：従事事業キーは3項目（jujiJigyoNo・jujiBasyoNo・jisiNendo）に分割して渡す。
 //   登録リクエストは JSON 文字列（requestJson）で渡す。戻り値の構造は従来どおり。
-// import getJigyo from '@salesforce/apex/JUJ080Controller.getJigyo';
-// import getJujisha from '@salesforce/apex/JUJ080Controller.getJujisha';
-// import loadApplication from '@salesforce/apex/JUJ080Controller.loadApplication';
-// import checkJigyo from '@salesforce/apex/JUJ080Controller.checkJigyo';
-// import saveApplication from '@salesforce/apex/JUJ080Controller.saveApplication';
-// import deleteApplication from '@salesforce/apex/JUJ080Controller.deleteApplication';
-// import deleteAllApplications from '@salesforce/apex/JUJ080Controller.deleteAllApplications';
+// import getJigyo from '@salesforce/apex/Juj_JigyoOboTourokuController.getJigyo';
+// import getJujisha from '@salesforce/apex/Juj_JigyoOboTourokuController.getJujisha';
+// import loadApplication from '@salesforce/apex/Juj_JigyoOboTourokuController.loadApplication';
+// import checkJigyo from '@salesforce/apex/Juj_JigyoOboTourokuController.checkJigyo';
+// import saveApplication from '@salesforce/apex/Juj_JigyoOboTourokuController.saveApplication';
+// import deleteApplication from '@salesforce/apex/Juj_JigyoOboTourokuController.deleteApplication';
+// import deleteAllApplications from '@salesforce/apex/Juj_JigyoOboTourokuController.deleteAllApplications';
 
 // 共通の検索子画面（JUJ110・120・140）に渡す重なり順（本画面から直接開くため 1）
 const SUB_SCREEN_LEVEL = 1;
@@ -33,15 +34,17 @@ const toText = (value) => (value == null ? '' : String(value));
 const FROM_JIGYO_INFO = 'JIGYO_INFO'; // 従事事業基本情報
 const FROM_MENU = 'MENU'; // 従事事業メニュー
 
-// 【要確認 QA-20】メッセージ文言・ID。正式版ではカスタム表示ラベルに置き換える。
+// メッセージ。末尾は 4.入力チェックの No.【要確認 QA-20】正式版ではカスタム表示ラベルに置き換える。
 const MSG = {
-    REQUIRED: 'この項目を入力してください。', // 単項目の未入力（項目の下に表示）
-    JIGYO_KEY_REQUIRED: '従事事業No、従事場所No、実施年度を入力してください。', // 従事事業基本情報から遷移し、キーが欠けている場合のみ
-    JIGYO_NOT_FOUND: '従事事業が存在しません。',
-    JUJISHA_NOT_FOUND: '従事者が存在しません。', // WLP007-0009 相当
-    WEEKDAY_REQUIRED: '従事可能曜日を選択してください。',
-    KANOUBI_REQUIRED: '従事可能日を指定してください。',
-    SKILL_REQUIRED: 'スキルを選択してください。',
+    REQUIRED: (label) => `${label}は必須入力項目です。`, // No.1〜3・6・10（項目の下に表示）
+    NENDO_FORMAT: '実施年度は4桁の半角数字（西暦）で入力してください。', // No.4（項目の下に表示）
+    KIBOU_NISSU_FORMAT: '希望従事日数は3桁以内の1以上の半角数字で入力してください。', // No.10（項目の下に表示）
+    JIGYO_KEY_REQUIRED: '従事事業No、従事場所No、実施年度を入力してください。', // 従事事業基本情報から遷移し、キーが欠けている場合のみ（防御用）
+    JIGYO_NOT_FOUND: '従事事業が存在しません。', // No.5
+    JUJISHA_NOT_FOUND: '従事者が存在しません。', // No.7（WLP007-0009 相当）
+    WEEKDAY_REQUIRED: '従事可能曜日を選択してください。', // No.8
+    KANOUBI_REQUIRED: '従事可能日を指定してください。', // No.9
+    SKILL_REQUIRED: 'スキルを選択してください。', // No.11
     CONFIRM_OVERWRITE: '入力中の応募情報は破棄されます。よろしいですか？',
     CONFIRM_SAVE: '登録します。よろしいですか？',
     CONFIRM_DELETE: '削除します。よろしいですか？',
@@ -63,11 +66,14 @@ const TITLE = {
     MENU: 'メニュー確認'
 };
 
-// 【要確認】従事経験の値
-const KEIKEN_ARI = '1'; // 有
-const KEIKEN_NASHI = '0'; // 無
+// 実施年度：半角数字4桁（西暦）
+const NENDO_PATTERN = /^[0-9]{4}$/;
 
-// 【要確認】スキル評価の選択肢（選択リスト値の確定後に差し替える）
+// 従事経験の値（選択リスト 有;無）
+const KEIKEN_ARI = '有';
+const KEIKEN_NASHI = '無';
+
+// スキル評価の選択肢（選択リスト 1〜5）
 const SKILL_OPTIONS = [
     { label: '5(得意)', value: '5' },
     { label: '4', value: '4' },
@@ -76,48 +82,57 @@ const SKILL_OPTIONS = [
     { label: '1(不得意)', value: '1' }
 ];
 
-// 項目ラベルの取得元オブジェクト（【要確認】API 名確定後に置換）
-const OBO_OBJECT = '従事事業応募__c'; // 従事事業応募
-const JIGYO_OBJECT = '従事事業__c'; // 従事事業
-const SODANIN_OBJECT = '相談員__c'; // 相談員マスタ（従事者情報部のラベル取得元）
-const OFFICE_OBJECT = 'Account'; // 事務所・法人（支部コードのラベル取得元）
+// 項目ラベルの取得元オブジェクト（3.表示ラベルの「項目ラベル取得元」）
+const OBO_OBJECT = 'Juji_Jigyo_Oubo__c'; // 従事事業応募
+const JIGYO_OBJECT = 'Juji_Jigyo__c'; // 従事事業
+const BASYO_OBJECT = 'Juji_Basyo_Master__c'; // 従事場所マスタ
+const SODANIN_OBJECT = 'Soudanin_Master__c'; // 相談員マスタ（従事者情報部のラベル取得元）
+const OFFICE_OBJECT = 'Account'; // 事務所・法人（支部コード・支部名のラベル取得元）
 
 // 画面項目 → [オブジェクト, 項目名, 既定ラベル]。ラベルはメタデータから取得し、取得できない場合は既定ラベルを表示する
 const LABEL_FIELDS = {
-    jujiJigyoNo: [JIGYO_OBJECT, '従事事業No__c', '従事事業No.'],
-    jigyoName: [JIGYO_OBJECT, '従事事業名__c', '従事事業名'],
-    jisiNendo: [JIGYO_OBJECT, '実施年度__c', '実施年度'],
-    shibuCode: [OFFICE_OBJECT, '支部コード__c', '支部コード'], // 従事事業・従事者情報部の両方で使用
-    uketukeNo: [OBO_OBJECT, '受付番号__c', '受付番号'],
-    kibouNissu: [OBO_OBJECT, '希望従事日数__c', '希望従事日数'],
-    keiken: [OBO_OBJECT, '従事経験__c', '従事経験'],
-    telFixed: [OBO_OBJECT, '連絡先_固定電話__c', '連絡先(固定電話)'],
-    telMobile: [OBO_OBJECT, '連絡先_携帯電話__c', '連絡先(携帯電話)'],
-    fax: [OBO_OBJECT, '連絡先_FAX__c', '連絡先(FAX)'],
-    mail: [OBO_OBJECT, '連絡先_Mail__c', '連絡先(Mail)'],
-    biko: [OBO_OBJECT, '備考__c', '備考'],
-    skillNote: [OBO_OBJECT, 'スキル特記事項__c', 'スキル特記事項'],
-    chosho: [OBO_OBJECT, '主な著書論文__c', '主な著書、論文'],
-    sodanKamoku: [OBO_OBJECT, '相談科目__c', '相談科目'],
+    jujiJigyoNo: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_No__c', '従事事業No.'],
+    jigyoName: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_Name__c', '従事事業名'],
+    jisiNendo: [JIGYO_OBJECT, 'Juji_Jisi_Nendo__c', '実施年度'],
+    jujiBasyoNo: [BASYO_OBJECT, 'JujM_Juji_Basyo_No__c', '従事場所No.'],
+    basyoName: [BASYO_OBJECT, 'JujM_Juji_Basyo_Name__c', '従事場所名'],
+    shibuCode: [OFFICE_OBJECT, 'Jims_Sibu_Code__c', '支部コード'], // 従事事業キー部・従事者情報部の両方で使用
+    shibuName: [OFFICE_OBJECT, 'Jims_Sibu_Name__c', '支部名'], // 同上
+    uketukeNo: [OBO_OBJECT, 'Oubo_Uketuke_No__c', '受付番号'],
+    kibouNissu: [OBO_OBJECT, 'Oubo_Kibo_Juji_Nisu__c', '希望従事日数'],
+    keiken: [OBO_OBJECT, 'Oubo_Juji_Keiken__c', '従事経験'],
+    telFixed: [OBO_OBJECT, 'Oubo_Renrakusaki_Kotei_No__c', '連絡先(固定電話)'],
+    telMobile: [OBO_OBJECT, 'Oubo_Renrakusaki_Tel_No__c', '連絡先(携帯電話)'],
+    fax: [OBO_OBJECT, 'Oubo_Renrakusaki_Fax_No__c', '連絡先(FAX)'],
+    mail: [OBO_OBJECT, 'Oubo_Renrakusaki_Mail__c', '連絡先(Mail)'],
+    biko: [OBO_OBJECT, 'Oubo_Biko__c', '備考'],
+    skillNote: [OBO_OBJECT, 'Oubo_Skill_Toki_Jiko__c', 'スキル特記事項'],
+    chosho: [OBO_OBJECT, 'Oubo_Tyosyo_Ronbun__c', '主な著書、論文'],
+    sodanKamoku: [OBO_OBJECT, 'Oubo_Sodan_Kamoku__c', '相談科目'],
     // 従事者情報部（相談員マスタの項目ラベルを使用）
-    jujishaName: [SODANIN_OBJECT, '氏名__c', '氏名'],
-    jujishaFurigana: [SODANIN_OBJECT, 'フリガナ__c', 'フリガナ'],
-    jujishaAddress: [SODANIN_OBJECT, '事務所住所__c', '事務所住所'],
-    jujishaTel: [SODANIN_OBJECT, '事務所電話番号__c', '事務所電話番号'],
-    jujishaFax: [SODANIN_OBJECT, '事務所FAX番号__c', '事務所FAX番号']
+    jujishaName: [SODANIN_OBJECT, 'SouM_Sodanin_Name__c', '氏名'],
+    jujishaFurigana: [SODANIN_OBJECT, 'SouM_Sodanin_Name_Furigana__c', 'フリガナ'],
+    jujishaAddress: [SODANIN_OBJECT, 'SouM_Jimusyo_Jusyo__c', '事務所住所'],
+    jujishaTel: [SODANIN_OBJECT, 'SouM_Jimusyo_Tel_No__c', '事務所電話番号'],
+    jujishaFax: [SODANIN_OBJECT, 'SouM_Jimusyo_Fax_No__c', '事務所FAX番号']
 };
 
-// スキル（8科目）：[項目名, 表示ラベル]。画面とサーバの受渡しは項目名をキーとする
-// ※ 画面のラベルは項目ラベル（「スキル」接頭辞付き）と異なるため、メタデータから取得せず固定値とする
+// 項目ラベル取得元が「固定」の項目
+const FIXED_LABELS = {
+    jujishaNo: '登録番号/相談員番号'
+};
+
+// スキル（8科目）：[項目名, 表示ラベル]。画面とサーバの受渡しは項目名をキーとする（並びは画面の表示順）
+// ※ 画面のラベルは項目ラベルと異なるため、メタデータから取得せず固定値とする（3.表示ラベル No.34）
 const SKILL_FIELDS = [
-    ['スキル_所得税__c', '(所得税)'],
-    ['スキル_会社法__c', '(会社法)'],
-    ['スキル_法人税__c', '(法人税)'],
-    ['スキル_財務会計__c', '(財務会計)'],
-    ['スキル_資産税__c', '(資産税)'],
-    ['スキル_譲渡山林__c', '(譲渡山林)'],
-    ['スキル_消費税__c', '(消費税)'],
-    ['スキル_贈与税__c', '(贈与税)']
+    ['Oubo_Skill_Syotoku_Zei__c', '(所得税)'],
+    ['Oubo_Skill_Kaisyaho__c', '(会社法)'],
+    ['Oubo_Skill_Hojin_Zei__c', '(法人税)'],
+    ['Oubo_Skill_Zaimu_Kaikei__c', '(財務会計)'],
+    ['Oubo_Skill_Sisan_Zei__c', '(資産税)'],
+    ['Oubo_Skill_Joto_Sanrin__c', '(譲渡山林)'],
+    ['Oubo_Skill_Syohi_Zei__c', '(消費税)'],
+    ['Oubo_Skill_Zoyo_Zei__c', '(贈与税)']
 ];
 
 // 従事可能曜日
@@ -129,7 +144,7 @@ const emptyJigyoKey = () => ({ jujiJigyoNo: '', jujiBasyoNo: '', jisiNendo: '' }
 const REQUIRED_JIGYO_KEY = 'jigyoKey'; // 従事事業No・従事場所No・実施年度
 const REQUIRED_JUJISHA = 'jujisha'; // 登録番号/相談員番号
 
-// 応募情報部の初期値（処理項目一覧：従事経験＝有）
+// 応募情報部の初期値（3.表示ラベル No.22〜37：従事経験＝有）
 const emptyForm = () => ({
     telFixed: '', // 連絡先（固定電話）
     telMobile: '', // 連絡先（携帯電話）
@@ -175,7 +190,7 @@ const STUB_APPLICATIONS = [
             applicationId: 'a00000000000001AAA',
             uketukeNo: 1,
             systemModstamp: '2026-10-01T01:00:00.000Z',
-            form: { telFixed: '072-111-1111', mail: 'sato@example.com', keiken: KEIKEN_ARI, weekdays: ['月', '水'], skills: [{ field: 'スキル_所得税__c', value: '5' }] },
+            form: { telFixed: '072-111-1111', mail: 'sato@example.com', keiken: KEIKEN_ARI, weekdays: ['月', '水'], skills: [{ field: 'Oubo_Skill_Syotoku_Zei__c', value: '5' }] },
             kanoubiDates: [{ kanoubiDate: '2026-11-03', timeSlots: [{ startTime: '13:00', endTime: '15:00' }] }]
         }
     },
@@ -186,7 +201,7 @@ const STUB_APPLICATIONS = [
             applicationId: 'a00000000000002AAA',
             uketukeNo: 2,
             systemModstamp: '2026-10-02T02:30:00.000Z',
-            form: { telMobile: '090-2222-2222', keiken: KEIKEN_ARI, weekdays: ['火', '木'], kibouNissu: '3', skills: [{ field: 'スキル_法人税__c', value: '4' }], sodanKamoku: '法人税' },
+            form: { telMobile: '090-2222-2222', keiken: KEIKEN_ARI, weekdays: ['火', '木'], kibouNissu: '3', skills: [{ field: 'Oubo_Skill_Hojin_Zei__c', value: '4' }], sodanKamoku: '法人税' },
             kanoubiDates: [
                 { kanoubiDate: '2026-11-03', timeSlots: [{ startTime: '09:00', endTime: '12:00' }] },
                 { kanoubiDate: '2026-12-01', timeSlots: [{ startTime: '10:00', endTime: '11:00' }] }
@@ -200,7 +215,7 @@ const STUB_APPLICATIONS = [
             applicationId: 'a00000000000003AAA',
             uketukeNo: 0, // 未採番（マイページからの応募）
             systemModstamp: '2026-10-03T00:15:00.000Z',
-            form: { mail: 'ichiro@example.com', keiken: '0', weekdays: [], biko: '午前のみ希望' },
+            form: { mail: 'ichiro@example.com', keiken: KEIKEN_NASHI, weekdays: [], biko: '午前のみ希望' },
             kanoubiDates: []
         }
     },
@@ -211,7 +226,7 @@ const STUB_APPLICATIONS = [
             applicationId: 'a00000000000004AAA',
             uketukeNo: 1,
             systemModstamp: '2026-10-05T03:00:00.000Z',
-            form: { telFixed: '06-4444-4444', keiken: KEIKEN_ARI, weekdays: ['土'], skills: [{ field: 'スキル_消費税__c', value: '3' }] },
+            form: { telFixed: '06-4444-4444', keiken: KEIKEN_ARI, weekdays: ['土'], skills: [{ field: 'Oubo_Skill_Syohi_Zei__c', value: '3' }] },
             kanoubiDates: []
         }
     }
@@ -255,7 +270,7 @@ const loadApplication = async ({ applicationId, jujiJigyoNo, jujiBasyoNo, jisiNe
     if (applicationId) {
         const app = STUB_APPLICATIONS.find((a) => a.application.applicationId === applicationId);
         if (!app) {
-            throw { body: { message: '対象の応募が存在しません。' } };
+            throw { body: { message: '指定された応募情報は登録されていません。' } };
         }
         return { jigyoKey: { ...app.jigyoKey }, jujishaNo: app.jujishaNo, jujisha: STUB_JUJISHA(app.jujishaNo), application: app.application };
     }
@@ -270,9 +285,9 @@ const loadApplication = async ({ applicationId, jujiJigyoNo, jujiBasyoNo, jisiNe
 const checkJigyo = async () => {};
 const saveApplication = async ({ requestJson }) => {
     const req = JSON.parse(requestJson);
-    // 追加モードで登録済みの従事者を登録した場合（サーバ側 7.(3)③a のエラー）
+    // 追加モードで登録済みの従事者を登録した場合（4.入力チェック No.18）
     if (!req.applicationId && STUB_APPLICATIONS.some((a) => isSameKey(a.jigyoKey, req.jigyoKey) && a.jujishaNo === req.jujishaNo)) {
-        throw { body: { message: 'この従事者の応募情報は既に登録されています。応募情報表示ボタンで登録内容を表示してください。' } };
+        throw { body: { message: '指定された従事者の応募情報はすでに登録されています。応募情報表示ボタンで登録内容を表示してください。' } };
     }
     return { uketukeNo: 4 };
 };
@@ -280,7 +295,7 @@ const deleteApplication = async () => {};
 const deleteAllApplications = async () => {};
 // ========== スタブ ここまで ==========
 
-export default class Juj080 extends NavigationMixin(LightningElement) {
+export default class JujJigyoOboTouroku extends NavigationMixin(LightningElement) {
     fromScreen = FROM_MENU;
 
     // 従事事業キー部
@@ -315,11 +330,11 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     _initialized = false;
 
     // 項目ラベル取得用のオブジェクト情報
-    objectApiNames = [OBO_OBJECT, JIGYO_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
+    objectApiNames = [OBO_OBJECT, JIGYO_OBJECT, BASYO_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
     @wire(getObjectInfos, { objectApiNames: '$objectApiNames' })
     objectInfos;
 
-    // ========== 1. 初期表示 ==========
+    // ========== No.1 画面初期化 ==========
     // 【要確認】遷移パラメータの受渡し方式（暫定：URL state）
     // ※ スタブ：STUB_PAGE_STATE に遷移元が設定されている場合はそれを使用する（ローカルプレビュー用。Apex デプロイ後は pageRef.state のみとする）
     @wire(CurrentPageReference)
@@ -332,9 +347,9 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
     }
 
     async initialize(state) {
-        // ① 初期値 ③ 追加モード
+        // 追加モードとし、応募情報部を初期化する
         this.resetJujishaAndApplication();
-        // ② a. 従事事業基本情報から遷移：従事事業キーを設定し、事業の取得を行う
+        // 従事事業基本情報表示から遷移した場合：引き継いだ従事事業キーを設定し、No.18 従事事業情報入力を呼び出す
         if (state.c__from === FROM_JIGYO_INFO) {
             this.fromScreen = FROM_JIGYO_INFO;
             this.jigyoKey = {
@@ -345,22 +360,23 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
             await this.loadJigyo();
             this.prevJigyoKey = { ...this.jigyoKey };
         }
-        // ② b. 従事事業メニューから遷移：入力制御は getter で行う
+        // 従事事業メニューから遷移した場合：従事事業キー部は空白（入力制御は getter で行う）
     }
 
-    // ========== 2. 従事事業キー変更時 ==========
+    // ========== No.2 従事事業No.／従事場所No.／実施年度のフォーカスアウト ==========
     handleJigyoKeyBlur(event) {
         const field = event.target.dataset.field; // jujiJigyoNo / jujiBasyoNo / jisiNendo
         this.jigyoKey = { ...this.jigyoKey, [field]: event.target.value };
         this.onJigyoKeyChanged();
     }
 
-    // 従事事業検索（JUJ110）：検索条件は初期値なし。フォーカスアウトと同じ契機のため、メッセージは消去しない
+    // ========== No.3 従事事業検索ボタン押下（JUJ110） ==========
+    // 検索条件は初期値なし。フォーカスアウトと同じ契機のため、メッセージは消去しない
     handleJigyoSearchClick() {
         this.isJigyoSearchOpen = true;
     }
 
-    // 従事事業検索からの戻り：従事事業キー3項目を設定し、「2. 従事事業キー変更時」の処理を行う
+    // 従事事業データが渡された場合：従事事業キー3項目を設定し、No.2 と同じ処理を行う
     handleJigyoSearchSelect(event) {
         this.isJigyoSearchOpen = false;
         const rec = event.detail.selectedRecord;
@@ -376,12 +392,12 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.isJigyoSearchOpen = false;
     }
 
-    // 従事場所検索（JUJ120）
+    // ========== No.4 従事場所検索ボタン押下（JUJ120） ==========
     handleBasyoSearchClick() {
         this.isBasyoSearchOpen = true;
     }
 
-    // 従事場所検索からの戻り：従事場所No を設定し、「2. 従事事業キー変更時」の処理を行う
+    // 従事場所データが渡された場合：従事場所No. を設定し、No.2 と同じ処理を行う
     handleBasyoSearchSelect(event) {
         this.isBasyoSearchOpen = false;
         const rec = event.detail.selectedRecord;
@@ -393,23 +409,24 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.isBasyoSearchOpen = false;
     }
 
+    // No.2 の処理
     async onJigyoKeyChanged() {
         // 入力された項目の未入力エラーを消去する（頭部メッセージは次のボタン押下まで保持する）
         this.clearRequiredErrors(REQUIRED_JIGYO_KEY, this.jigyoKey);
-        // (1) 事業の取得
+        // 従事場所名の取得・No.18 従事事業情報入力
         await this.loadJigyo();
-        // (2) 3項目のいずれかが変わった場合、追加モードとし、応募情報部（受付番号・従事可能日を含む）を初期化する
-        //     登録番号/相談員番号・従事者情報部は保持する
+        // 3項目のいずれかが変わった場合、追加モードとし、応募情報部（受付番号・従事可能個別日を含む）を初期化する
+        // 登録番号/相談員番号・従事者情報部は保持する。未登録の入力があっても確認ダイアログは表示しない
         if (!this.isSameJigyoKey(this.jigyoKey, this.prevJigyoKey)) {
             this.resetApplicationForm();
         }
         this.prevJigyoKey = { ...this.jigyoKey };
     }
 
-    // 2.(1) 事業の取得
+    // ========== No.18 従事事業情報入力呼び出し（No.2 の従事場所名の取得を含む） ==========
     async loadJigyo() {
         const { jujiJigyoNo, jujiBasyoNo, jisiNendo } = this.jigyoKey;
-        // 従事場所No が変わっていない場合、従事場所名は再設定しない（表示のちらつき防止）
+        // 従事場所No. が変わっていない場合、従事場所名は再設定しない（表示のちらつき防止）
         const isBasyoChanged = jujiBasyoNo !== this.prevJigyoKey.jujiBasyoNo;
         if (isBasyoChanged) {
             this.basyoName = '';
@@ -420,7 +437,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
             this.jigyo = {};
             this.lastUketukeNo = null;
         }
-        // ① 従事場所No 入力時は従事場所名を取得、② 3項目すべて入力時は事業を取得。いずれも該当しない場合は呼び出さない
+        // 従事場所No. 入力時は従事場所名、3項目すべて入力時は従事事業を取得する。いずれも該当しない場合は呼び出さない
         if (!jujiBasyoNo && !(jujiJigyoNo && jisiNendo)) {
             return;
         }
@@ -430,6 +447,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
             if (isBasyoChanged) {
                 this.basyoName = result.basyoName || '';
             }
+            // 取得できなかった場合は空白とし、応募情報部を非活性とする（isApplicationDisabled）
             this.jigyo = result.jigyo || {};
             this.lastUketukeNo = result.jigyo ? result.jigyo.lastUketukeNo : null;
         } catch (error) {
@@ -437,18 +455,18 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 3. 登録番号/相談員番号の変更時 ==========
+    // ========== No.5 登録番号/相談員番号のフォーカスアウト ==========
     handleJujishaNoBlur(event) {
         this.jujishaNo = event.target.value;
         this.onJujishaNoChanged();
     }
 
-    // 従事対象者検索（JUJ140）
+    // ========== No.6 登録番号/相談員番号検索ボタン押下（JUJ140） ==========
     handleJujishaSearchClick() {
         this.isJujishaSearchOpen = true;
     }
 
-    // 従事対象者検索からの戻り：番号（会員は登録番号、相談員は相談員番号）を設定し、「3. 番号の変更時」の処理を行う
+    // 従事者データが渡された場合：番号（会員は登録番号、相談員は相談員番号）を設定し、No.5 と同じ処理を行う
     handleJujishaSearchSelect(event) {
         this.isJujishaSearchOpen = false;
         const rec = event.detail.selectedRecord;
@@ -460,28 +478,29 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.isJujishaSearchOpen = false;
     }
 
+    // No.5 の処理
     async onJujishaNoChanged() {
         // 入力された場合は未入力エラーを消去する（頭部メッセージは次のボタン押下まで保持する）
         this.clearRequiredErrors(REQUIRED_JUJISHA, { jujishaNo: this.jujishaNo });
-        // 変更前の値と同じ場合は何もしない
+        // 変更されていない場合は何もしない
         if (this.jujishaNo === this.prevJujishaNo) {
             return;
         }
         this.prevJujishaNo = this.jujishaNo;
-        // (1) 従事者の取得
+        // No.19 従事者情報部入力
         await this.loadJujisha();
-        // (2) ① 応募情報部の入力内容は保持し、受付番号・従事可能日のみ初期化する ② 追加モードとする
-        // ※ 登録済みの応募がある従事者かどうかは登録時にサーバ側でチェックする（7.(3)③a）
+        // 受付番号を空白、従事可能個別日を未指定とする（応募情報部のその他の入力内容は保持する）。追加モードとする
+        // ※ 登録済みの応募がある従事者かどうかは登録時にサーバ側でチェックする（4.入力チェック No.18）
         this.kanoubiDates = [];
         this.uketukeNo = null;
         this.toAddMode();
     }
 
-    // 3.(1) 従事者の取得（取得できない場合はエラーとせず空白表示）
+    // ========== No.19 従事者情報部入力呼び出し（取得できない場合はエラーとせず空白表示） ==========
     async loadJujisha() {
         this.jujisha = {};
         if (!this.jujishaNo) {
-            return; // ①
+            return;
         }
         try {
             // 戻り値：{ jujishaType, jujishaNo, name, furigana, shibuCode, shibuName, address, tel, fax } | null
@@ -492,28 +511,28 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 4. 応募情報表示ボタン押下時 ==========
+    // ========== No.7 応募情報表示ボタン押下 ==========
     async handleShowApplicationClick() {
         this.clearMessages();
-        // (1) 入力チェック ①②（③ 従事者の存在チェックはサーバ側で行う）
+        // 4.入力チェック No.1〜6（No.17 従事者の存在はサーバ側でチェックする）
         // ※ エラーはまとめて表示するため、すべてのチェックを行ってから判定する
         const errors = [];
         const isValid = [this.validateJujishaNo(), this.validateJigyoKey(errors)].every(Boolean);
         if (!this.showErrorMessages(errors, isValid)) {
             return;
         }
-        // (2) 上書き確認
+        // 応募情報部に未登録の変更が存在する場合は確認する
         if (this.isDirty && !(await this.confirmDialog(MSG.CONFIRM_OVERWRITE, TITLE.SHOW_APPLICATION))) {
             return;
         }
         try {
-            // 戻り値：{ jujisha, application | null }
+            // 5.データ更新 (1)。戻り値：{ jujisha, application | null }
             const result = await loadApplication({ ...this.jigyoKey, jujishaNo: this.jujishaNo });
-            // (3) ① 初期化した後、従事者を表示する
+            // 従事者情報部・応募情報部を初期化し、取得した従事者を表示する
             this.resetApplicationForm();
             this.jujisha = result.jujisha || {};
             this.prevJujishaNo = this.jujishaNo;
-            // ② 応募あり → 応募情報の読込（変更モード）、応募なし → 追加モード
+            // 取得できた場合は No.20 応募情報読込（変更モード）、取得できなかった場合は追加モード
             if (result.application) {
                 this.applyApplication(result.application);
             }
@@ -522,31 +541,31 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 応募情報検索ボタン押下時：応募情報検索（JUJ082）を表示する ==========
+    // ========== No.8 応募情報検索ボタン押下（JUJ082） ==========
     handleApplicationSearchClick() {
         this.clearMessages();
         this.isApplicationSearchOpen = true;
     }
 
-    // 応募情報検索の閉じる
+    // 応募情報が渡されなかった場合（閉じる）：何もしない
     handleApplicationSearchClose() {
         this.isApplicationSearchOpen = false;
     }
 
-    // ========== 5. 応募情報検索からの戻り時（応募行の選択） ==========
+    // 応募情報が渡された場合（応募行の選択）
     async handleApplicationSearchSelect(event) {
         this.isApplicationSearchOpen = false;
         const { applicationId } = event.detail;
         try {
-            // 戻り値：{ jigyoKey, jujishaNo, jujisha, application }
+            // 5.データ更新 (1)。戻り値：{ jigyoKey, jujishaNo, jujisha, application }
             const res = await loadApplication({ applicationId });
-            // ① 従事事業メニューから遷移した場合、選択された応募の従事事業キーを設定し、事業の取得を行う
+            // 従事事業メニューから遷移した場合：選択された応募の従事事業キーを設定し、No.18 従事事業情報入力を呼び出す
             if (this.fromScreen === FROM_MENU) {
                 this.jigyoKey = { ...res.jigyoKey };
                 await this.loadJigyo();
                 this.prevJigyoKey = { ...this.jigyoKey };
             }
-            // ② 応募情報の読込を行い、変更モードとする
+            // 選択された応募の従事者を設定し、No.20 応募情報読込を呼び出す（変更モード）
             this.jujishaNo = res.jujishaNo;
             this.prevJujishaNo = res.jujishaNo;
             this.jujisha = res.jujisha || {};
@@ -556,34 +575,34 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 6. 従事可能日入力ボタン押下時 ==========
+    // ========== No.11 従事可能日入力ボタン押下 ==========
     async handleKanoubiInputClick() {
         this.clearMessages();
-        // (1) ① 従事事業キー・従事者の確定チェック（エラーはまとめて表示する）
+        // 4.入力チェック No.1〜7（エラーはまとめて表示する）
         const errors = [];
         const isValid = [this.validateJigyoKey(errors), this.validateJujisha(errors)].every(Boolean);
         if (!this.showErrorMessages(errors, isValid)) {
             return;
         }
-        // (1) ②③ 実施日の有無・一括割当実行中（サーバ側でチェック）
+        // 4.入力チェック No.14 実施日の有無・No.15 一括割当実行中（サーバ側でチェック）
         try {
             await checkJigyo({ ...this.jigyoKey, checkJisshibi: true });
         } catch (error) {
             this.showError(error);
             return;
         }
-        // (2) ① 従事可能日指定（JUJ081）を表示する（従事事業キー・番号・保持中の従事可能日を html で引き渡す）
+        // 従事可能日指定（JUJ081）を表示する（従事事業キー・番号・保持中の従事可能日を html で引き渡す）
         this.isKanoubiOpen = true;
     }
 
-    // (2) ② a. 保存：戻り値の従事可能日で保持内容を置き換える ③ DB は更新しない
+    // 「保存」で閉じられた場合：戻り値の従事可能日で保持内容を置き換える（DB は更新しない）
     handleKanoubiSave(event) {
         this.isKanoubiOpen = false;
         this.kanoubiDates = event.detail.kanoubiDates;
         this.isDirty = true;
     }
 
-    // (2) ② b. 閉じる：何もしない（JUJ081 の初期表示エラーで閉じた場合はメッセージを表示する）
+    // 「閉じる」で閉じられた場合：何もしない（JUJ081 の初期表示エラーで閉じた場合はメッセージを表示する）
     handleKanoubiClose(event) {
         this.isKanoubiOpen = false;
         const errorMessage = event.detail?.errorMessage;
@@ -599,13 +618,13 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.isDirty = true;
     }
 
-    // 全日程従事可能（ON：従事可能曜日を入力不可）
+    // No.9・No.10 全日程従事可能（ON：従事可能曜日を入力不可、OFF：入力可）
     handleAllDaysChange(event) {
         this.form = { ...this.form, allDays: event.target.checked };
         this.isDirty = true;
     }
 
-    // 従事経験：ラジオボタンの選択値を設定する
+    // 従事経験：ラジオボタンの選択値（有／無）を設定する
     handleKeikenChange(event) {
         this.form = { ...this.form, keiken: event.target.value };
         this.isDirty = true;
@@ -629,7 +648,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
 
     // スキル：項目名（コンボボックスの data-field）ごとに選択値を保持する。既存の科目は値を更新、なければ追加する
     handleSkillChange(event) {
-        const field = event.target.dataset.field; // 例：'スキル_所得税__c'
+        const field = event.target.dataset.field; // 例：'Oubo_Skill_Syotoku_Zei__c'
         const value = event.detail.value;
 
         const skills = [...this.form.skills];
@@ -644,10 +663,10 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.isDirty = true;
     }
 
-    // ========== 7. 登録ボタン押下時 ==========
+    // ========== No.12 登録ボタン押下：5.データ更新 (2)(3) ==========
     async handleSaveClick() {
         this.clearMessages();
-        // (1) 入力チェック ①②③（④ 一括割当実行中はサーバ側でチェック）。エラーはまとめて表示する
+        // ① 入力チェック（画面）：4.入力チェック No.1〜13。エラーはまとめて表示する
         const errors = [];
         const isValid = [
             this.validateJigyoKey(errors),
@@ -657,20 +676,20 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         if (!this.showErrorMessages(errors, isValid)) {
             return;
         }
-        // (1) ④ 一括割当実行中（サーバ側でチェック。登録処理内でも再チェックする）
+        // 4.入力チェック No.15 一括割当実行中（確認ダイアログの前にサーバ側でチェック。登録処理内でも再チェックする）
         try {
             await checkJigyo({ ...this.jigyoKey, checkJisshibi: false });
         } catch (error) {
             this.showError(error);
             return;
         }
-        // (2) 登録確認
+        // 確認ダイアログ
         if (!(await this.confirmDialog(MSG.CONFIRM_SAVE, TITLE.SAVE))) {
             return;
         }
         this.isLoading = true;
         try {
-            // (3) 登録処理。戻り値：{ uketukeNo }（採番しなかった場合は null）
+            // ②〜④ 登録処理。戻り値：{ uketukeNo }（採番しなかった場合は null）
             // 登録リクエストは JSON 文字列で渡す（Apex の内部クラスを引数に使用できないため）
             const result = await saveApplication({
                 requestJson: JSON.stringify({
@@ -682,11 +701,11 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
                     kanoubiDates: this.kanoubiDates
                 })
             });
-            // (4) ① 採番した場合のみ最終受付番号を更新する
+            // 受付番号を採番した場合は、最終受付番号に採番した受付番号を設定する
             if (result.uketukeNo != null) {
                 this.lastUketukeNo = result.uketukeNo;
             }
-            // ② 従事事業キー部は保持し、それ以外を初期化して追加モードとする
+            // 従事事業キー部は保持し、それ以外を初期化して追加モードとする
             this.resetJujishaAndApplication();
             this.showSuccess(MSG.SAVED);
         } catch (error) {
@@ -696,18 +715,18 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 8. 削除ボタン押下時 ==========
+    // ========== No.13 削除ボタン押下：5.データ更新 (4) ==========
     async handleDeleteClick() {
         this.clearMessages();
-        // (1) 削除確認
+        // 確認ダイアログ
         if (!(await this.confirmDialog(MSG.CONFIRM_DELETE, TITLE.DELETE))) {
             return;
         }
         this.isLoading = true;
         try {
-            // (2) 削除処理（画面表示時のシステム更新日時を渡し、排他チェックを行う）
+            // 削除処理（応募読込時のシステム更新日時を渡し、排他チェックを行う）
             await deleteApplication({ ...this.jigyoKey, jujishaNo: this.jujishaNo, systemModstamp: this.systemModstamp });
-            // (3) 画面反映
+            // 登録番号/相談員番号・従事者情報部・応募情報部を初期化し、追加モードとする
             this.resetJujishaAndApplication();
             this.showSuccess(MSG.DELETED);
         } catch (error) {
@@ -717,15 +736,15 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 9. 全削除ボタン押下時 ==========
+    // ========== No.14 全削除ボタン押下：5.データ更新 (5) ==========
     async handleDeleteAllClick() {
         this.clearMessages();
-        // (1) 入力チェック
+        // 4.入力チェック No.1〜5
         const errors = [];
         if (!this.showErrorMessages(errors, this.validateJigyoKey(errors))) {
             return;
         }
-        // (2) 削除確認（2回）
+        // 確認ダイアログ（2回）
         const msg1 =
             `${MSG.CONFIRM_DELETE_ALL_1}\n従事事業名:${this.jigyo.jigyoName}\n支部名:${this.jigyo.shibuName}\n` +
             `従事場所名:${this.basyoName}\n実施年度:${this.jigyoKey.jisiNendo}`;
@@ -735,9 +754,9 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
         this.isLoading = true;
         try {
-            // (3) 削除処理
+            // 全削除処理
             await deleteAllApplications({ ...this.jigyoKey });
-            // (4) 画面反映
+            // 登録番号/相談員番号・従事者情報部・応募情報部を初期化し、追加モードとする
             this.resetJujishaAndApplication();
             this.showSuccess(MSG.DELETED);
         } catch (error) {
@@ -747,12 +766,12 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         }
     }
 
-    // ========== 10. クリア・戻る・メニューボタン押下時 ==========
+    // ========== No.15 クリア・No.16 戻る・No.17 メニューボタン押下 ==========
     async handleClearClick() {
         if (!(await this.confirmDiscard(TITLE.CLEAR))) {
             return;
         }
-        // ① b. 従事事業メニューから遷移した場合：従事事業キー部も初期化する
+        // 従事事業メニューから遷移した場合：画面を初期表示の状態に戻す（従事事業キー部も初期化する）
         if (this.fromScreen === FROM_MENU) {
             this.jigyoKey = emptyJigyoKey();
             this.prevJigyoKey = emptyJigyoKey();
@@ -760,7 +779,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
             this.jigyo = {};
             this.lastUketukeNo = null;
         }
-        // ① a・b 共通
+        // 従事事業基本情報表示から遷移した場合：従事事業キー部は保持し、それ以外を初期表示の状態に戻す
         this.resetJujishaAndApplication();
         this.clearMessages();
     }
@@ -769,7 +788,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         if (!(await this.confirmDiscard(TITLE.BACK))) {
             return;
         }
-        // ② 【要確認】遷移元への戻り方
+        // 遷移元の画面に戻る【要確認】遷移元への戻り方
         window.history.back();
     }
 
@@ -777,20 +796,20 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         if (!(await this.confirmDiscard(TITLE.MENU))) {
             return;
         }
-        // ③ 【要確認】JUJ010 のページ API 名
+        // JUJ010 従事事業メニューに遷移する【要確認】JUJ010 のページ API 名
         this[NavigationMixin.Navigate]({
             type: 'standard__navItemPage',
             attributes: { apiName: 'JUJ010' }
         });
     }
 
-    // 10.(1) 未登録の変更がある場合のみ確認する
+    // 未登録の変更（応募情報部、従事可能日）が存在する場合のみ確認する
     async confirmDiscard(title) {
         return !this.isDirty || this.confirmDialog(MSG.CONFIRM_DISCARD, title);
     }
 
-    // ========== 11. 共通処理 ==========
-    // 11.(1) 応募情報の読込（② 表示 ③ システム更新日時を保持 → 変更モード）
+    // ========== No.20 応募情報読込呼び出し ==========
+    // 応募情報部・従事可能日を表示し、排他チェック用にシステム更新日時を保持する。変更モードとする
     applyApplication(app) {
         this.applicationId = app.applicationId;
         this.systemModstamp = app.systemModstamp;
@@ -800,17 +819,21 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         this.isDirty = false;
     }
 
-    // ※ チェック方針：単項目のエラー（未入力・形式）は各項目の下に表示し、それ以外は errors に追加して頭部に表示する。
+    // ========== 4.入力チェック（画面） ==========
+    // ※ 単項目のエラー（未入力・形式）は各項目の下に表示し、それ以外は errors に追加して頭部に表示する。
     //   戻り値はチェック結果（true：エラーなし）。
 
-    // 11.(2) ① 従事事業キー：未入力は各項目の下、3項目入力済みで事業が取得できない場合は頭部に表示する
+    // No.1〜3 必須入力、No.4 実施年度 フォーマット・桁数（項目の下）、No.5 従事事業 存在（頭部）
     validateJigyoKey(errors) {
         const isEntered = this.reportRequired(REQUIRED_JIGYO_KEY, this.jigyoKey);
         if (!isEntered) {
-            // 従事事業基本情報から遷移した場合は入力欄がないため、頭部に表示する
+            // 従事事業基本情報から遷移した場合は入力欄がないため、頭部に表示する（防御用）
             if (this.isJigyoKeyReadonly) {
                 errors.push(MSG.JIGYO_KEY_REQUIRED);
             }
+            return false;
+        }
+        if (!this.validateNendoFormat(errors)) {
             return false;
         }
         if (!this.hasJigyo) {
@@ -820,12 +843,27 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return true;
     }
 
-    // 11.(2) ② a 登録番号/相談員番号の未入力（項目の下に表示）
+    // No.4 実施年度：半角数字4桁（西暦）以外の場合はエラー（項目の下。入力欄がない場合は頭部）
+    validateNendoFormat(errors) {
+        if (NENDO_PATTERN.test(this.jigyoKey.jisiNendo)) {
+            return true;
+        }
+        const el = this.template.querySelector('[data-required][data-field="jisiNendo"]');
+        if (el) {
+            el.setCustomValidity(MSG.NENDO_FORMAT);
+            el.reportValidity();
+        } else {
+            errors.push(MSG.NENDO_FORMAT);
+        }
+        return false;
+    }
+
+    // No.6 登録番号/相談員番号 必須入力（項目の下）
     validateJujishaNo() {
         return this.reportRequired(REQUIRED_JUJISHA, { jujishaNo: this.jujishaNo });
     }
 
-    // 11.(2) ② 従事者：未入力は項目の下、入力済みで従事者が取得できない場合は頭部に表示する
+    // No.6 必須入力（項目の下）、No.7 従事者 存在（頭部）
     validateJujisha(errors) {
         if (!this.validateJujishaNo()) {
             return false;
@@ -837,33 +875,38 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return true;
     }
 
-    // 7.(1) ② 必須入力フラグ ③ 電話番号・メールアドレスの形式
+    // No.8〜13 登録時のチェック
     validateForSave(errors) {
         const ctrl = this.inputControl;
         const f = this.form;
         const errorCount = errors.length;
+        // No.8 従事可能曜日 必須選択
         if (ctrl.requiredWeekday && !f.allDays && f.weekdays.length === 0) {
-            errors.push(MSG.WEEKDAY_REQUIRED); // a
+            errors.push(MSG.WEEKDAY_REQUIRED);
         }
-        if (ctrl.requiredKanoubi && this.kanoubiDates.length === 0) {
-            errors.push(MSG.KANOUBI_REQUIRED); // b
+        // No.9 従事可能日 必須選択（時間帯が1件以上選択されていること）
+        if (ctrl.requiredKanoubi && !this.kanoubiDates.some((k) => k.timeSlots && k.timeSlots.length > 0)) {
+            errors.push(MSG.KANOUBI_REQUIRED);
         }
-        // d. スキルが1科目以上選択されていること（値が空の科目は未選択とみなす）（QA-21）
+        // No.11 スキル 必須選択（値が空の科目は未選択とみなす）
         if (ctrl.requiredSkill && !f.skills.some((s) => s.value)) {
             errors.push(MSG.SKILL_REQUIRED);
         }
-        // c. 希望従事日数（required 属性）・③ 電話番号・メールアドレス（type/pattern）：単項目チェックのため各項目の下に表示する
+        // No.10 希望従事日数（required・min・max・step）、No.12 連絡先（Mail）（type=email）：各項目の下に表示する
         // ※ html 側の lightning-input に data-validate を設定する（入力不可の項目はチェックされない）
+        // 【要確認】No.13 連絡先（固定電話・携帯電話・FAX）は現在チェックなし（type=tel は形式チェックを行わない）
         const inputs = [...this.template.querySelectorAll('[data-validate]')];
         const isInputValid = inputs.reduce((ok, el) => el.reportValidity() && ok, true);
         return isInputValid && errors.length === errorCount;
     }
 
-    // 単項目の必須チェック：values のうち未入力の項目の下にエラーを表示する（入力済みの項目はエラーを消去する）
+    // 単項目の必須チェック：values のうち未入力の項目の下に「{項目名}は必須入力項目です。」を表示する（入力済みの項目はエラーを消去する）
     // html 側の lightning-input に data-required（グループ名）・data-field（values のキー）を設定する
     reportRequired(group, values) {
+        const labels = this.labels;
         this.template.querySelectorAll(`[data-required="${group}"]`).forEach((el) => {
-            el.setCustomValidity(values[el.dataset.field] ? '' : MSG.REQUIRED);
+            const field = el.dataset.field;
+            el.setCustomValidity(values[field] ? '' : MSG.REQUIRED(labels[field]));
             el.reportValidity();
         });
         return Object.values(values).every((value) => !!value);
@@ -879,6 +922,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         });
     }
 
+    // ========== 初期化・モード ==========
     // 登録番号/相談員番号・従事者情報部・応募情報部を初期化し、追加モードとする
     resetJujishaAndApplication() {
         this.jujishaNo = '';
@@ -954,10 +998,19 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return this.headerMessages.length > 0;
     }
 
-    // ========== Getter（項目ラベル） ==========
-    // 画面項目のラベル（メタデータから取得。取得できない場合は既定ラベル）
+    // No.10 希望従事日数：未入力（必須の場合）・形式不正のメッセージ（html の message-when-* に設定する）
+    get kibouNissuRequiredMessage() {
+        return MSG.REQUIRED(this.labels.kibouNissu);
+    }
+
+    get kibouNissuFormatMessage() {
+        return MSG.KIBOU_NISSU_FORMAT;
+    }
+
+    // ========== Getter（3.表示ラベル） ==========
+    // 画面項目のラベル（メタデータから取得。取得できない場合は既定ラベル。取得元が「固定」の項目は固定値）
     get labels() {
-        const labels = {};
+        const labels = { ...FIXED_LABELS };
         Object.entries(LABEL_FIELDS).forEach(([key, [objectApiName, field, defaultLabel]]) => {
             const fieldInfo = this.getFieldInfos(objectApiName)[field];
             labels[key] = fieldInfo ? fieldInfo.label : defaultLabel;
@@ -978,7 +1031,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return WEEKDAYS.map((day) => ({ value: day, checked: this.form.weekdays.includes(day) }));
     }
 
-    // ========== Getter（処理項目一覧の入力制御） ==========
+    // ========== Getter（3.表示ラベルの入力制御） ==========
     // 事業・従事者の取得有無（未取得時は空オブジェクト {}）
     get hasJigyo() {
         return Object.keys(this.jigyo).length > 0;
@@ -996,23 +1049,23 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return this.applicationId != null;
     }
 
-    // 削除ボタン：追加モードでは使用不可
+    // No.39 削除ボタン：追加モードでは使用不可
     get isDeleteDisabled() {
         return !this.isChangeMode;
     }
 
-    // 従事事業キー：従事事業基本情報から遷移した場合は入力不可
+    // No.1・6・9 従事事業キー：従事事業基本情報から遷移した場合は入力不可
     get isJigyoKeyReadonly() {
         return this.fromScreen === FROM_JIGYO_INFO;
     }
 
-    // 従事事業キー未確定 → 応募情報部をすべて入力不可
+    // 応募情報部：従事事業を取得できていない場合はすべて入力不可
     get isApplicationDisabled() {
         return !this.hasJigyo;
     }
 
-    // 従事可能曜日：必須入力フラグ（従事可能日）＝1 または全日程従事可能 ON の場合は入力不可
-    // ※ 必須入力フラグ（従事可能曜日）と（従事可能日）が同時に 1 になることはない（事業側でチェック済み）
+    // No.29 従事可能曜日：全日程従事可能が ON、または必須入力フラグ（従事可能日）＝必須の場合は入力不可
+    // ※ 必須入力フラグ（従事可能曜日）と（従事可能日）が同時に必須になることはない（事業側でチェック済み）
     get isWeekdayDisabled() {
         return this.isApplicationDisabled || !!this.inputControl.requiredKanoubi || this.form.allDays;
     }
@@ -1021,21 +1074,22 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return !!this.inputControl.requiredWeekday;
     }
 
-    // 全日程従事可能：必須入力フラグ（従事可能日）＝1 の場合は入力不可
+    // No.28 全日程従事可能：必須入力フラグ（従事可能日）＝必須の場合は入力不可
     get isAllDaysDisabled() {
         return this.isApplicationDisabled || !!this.inputControl.requiredKanoubi;
     }
 
-    // 従事可能日入力ボタン：必須入力フラグ（従事可能曜日）＝1 の場合は使用不可
+    // No.31 従事可能日入力ボタン：必須入力フラグ（従事可能曜日）＝必須の場合は使用不可
     get isKanoubiButtonDisabled() {
         return this.isApplicationDisabled || !!this.inputControl.requiredWeekday;
     }
 
+    // No.32 希望従事日数：必須入力フラグ（希望従事日数）＝必須の場合は必須
     get isKibouNissuRequired() {
         return !!this.inputControl.requiredKibouNissu;
     }
 
-    // スキル：必須入力フラグ＝1 → 必須、任意入力フラグ＝1 → 入力可、いずれも 0 → 入力不可（QA-21）
+    // No.34 スキル：必須入力フラグ＝必須 → 必須、任意入力フラグ＝許可 → 入力可、それ以外 → 入力不可
     get isSkillRequired() {
         return !!this.inputControl.requiredSkill;
     }
@@ -1049,7 +1103,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return SKILL_OPTIONS;
     }
 
-    // スキル特記事項・主な著書、論文・相談科目：任意入力フラグ＝1 → 入力可、0 → 入力不可（QA-21）
+    // No.35〜37 スキル特記事項・主な著書、論文・相談科目：任意入力フラグ＝許可 → 入力可、禁止 → 入力不可
     get isSkillNoteDisabled() {
         return this.isApplicationDisabled || !this.inputControl.optionalSkillNote;
     }
@@ -1062,7 +1116,15 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return this.isApplicationDisabled || !this.inputControl.optionalSodanKamoku;
     }
 
-    // 従事経験：ラジオボタンの選択状態
+    // No.33 従事経験：ラジオボタンの値・選択状態
+    get keikenAri() {
+        return KEIKEN_ARI;
+    }
+
+    get keikenNashi() {
+        return KEIKEN_NASHI;
+    }
+
     get isKeiKenAri() {
         return this.form.keiken === KEIKEN_ARI;
     }
@@ -1071,7 +1133,7 @@ export default class Juj080 extends NavigationMixin(LightningElement) {
         return this.form.keiken === KEIKEN_NASHI;
     }
 
-    // 従事可能個別日：1件以上なら「指定済」、0件なら「未指定」
+    // No.30 従事可能個別日：1件以上なら「指定済」、0件なら「未指定」
     get kanoubiStatusLabel() {
         return this.kanoubiDates.length > 0 ? '指定済' : '未指定';
     }

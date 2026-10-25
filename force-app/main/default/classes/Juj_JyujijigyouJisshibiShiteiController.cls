@@ -1,19 +1,20 @@
 /**
  * JUJ081 従事可能日指定 コントローラ
- * 設計書：JUJ081 従事可能日指定 処理詳細 v5（2026/10/16 時間帯対応）
+ * 設計書：機能設計書 処理詳細（JUJ080／081／082 共通シート）
+ *   コメント中の番号は「1.画面アクション No.」「4.入力チェック No.」「5.データ更新 (n)」に対応する。
  *
  * ※ 本画面は DB を更新しない（参照のみ）。選択結果は JUJ080 へ返却し、JUJ080 の登録時に登録する。
- * ※ オブジェクト名・項目名は論理名で記載している（API 名確定後に一括置換する）。
  * ※ SOQL はすべてユーザモードで実行し、支部の条件は付けない。
  * ※ 画面から受け取った Id は使用せず、従事事業キー・番号から都度取得する。
  * ※ 一括割当実行中チェックは共通（Juj_CommonController）を呼び出す（エラー時は共通側で AuraHandledException を発生させる）。
  * ※ LWC から呼び出すメソッドは内部クラスを引数・戻り値に使用できないため、
  *   引数は基本型、戻り値は Map／List<Map> とする。
  */
-public with sharing class JUJ081Controller {
+public with sharing class Juj_JyujijigyouJisshibiShiteiController {
 
     // ==================== 定数 ====================
-    // 【要確認 QA-20】メッセージ（{メッセージID, 文言}）
+    // メッセージ（{メッセージID, 文言}）【要確認 QA-20】ID は暫定
+    // ※ 正常な操作では発生しない防御的なチェック（JUJ080 で事業・従事者を確認してから開く）のため、4.入力チェックには記載しない
     @TestVisible
     private static final List<String> E_JIGYO_NOT_FOUND = new List<String>{ 'JUJ081-E001', '従事事業が存在しません。' };
     @TestVisible
@@ -28,19 +29,19 @@ public with sharing class JUJ081Controller {
     @TestVisible
     private static final String FLAG_ON = '1';
 
-    // ==================== 1. 初期表示 ====================
+    // ==================== 画面アクション No.21 画面初期化 ====================
     // 戻り値：{ jigyo: { jigyoName, shibuCode, shibuName, basyoName }, jujishaName,
     //          ownAssigned: [{ kanoubiDate, timeSlots: [{ startTime, endTime }] }],
     //          minJisshibi: 'yyyy-MM-dd' | null, maxJisshibi: 'yyyy-MM-dd' | null }
     @AuraEnabled
     public static Map<String, Object> init(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo, String jujishaNo) {
         try {
-            // (2)① 従事事業の取得。取得できない場合はエラー
-            従事事業__c jigyo = selectJigyo(jujiJigyoNo, jujiBasyoNo, jisiNendo);
+            // 従事事業キーが一致する従事事業を取得する。取得できない場合はエラー（画面を閉じ、JUJ080 に表示する）
+            Juji_Jigyo__c jigyo = selectJigyo(jujiJigyoNo, jujiBasyoNo, jisiNendo);
             if (jigyo == null) {
                 throw error(E_JIGYO_NOT_FOUND);
             }
-            // (2)② 従事者の取得。取得できない場合はエラー
+            // 登録番号/相談員番号が一致する会員または相談員を取得する。取得できない場合はエラー（同上）
             Jujisha jujisha = findJujisha(jujishaNo);
             if (jujisha == null) {
                 throw error(E_JUJISHA_NOT_FOUND);
@@ -48,20 +49,20 @@ public with sharing class JUJ081Controller {
 
             InitResult result = new InitResult();
             result.jigyo = new JigyoInfo();
-            result.jigyo.jigyoName = jigyo.従事事業名__c;
-            result.jigyo.shibuCode = jigyo.支部__r?.支部コード__c;
-            result.jigyo.shibuName = jigyo.支部__r?.Name;
-            result.jigyo.basyoName = jigyo.従事場所__r?.従事場所名__c;
+            result.jigyo.jigyoName = jigyo.Juji_Juji_Jigyo_Name__c;
+            result.jigyo.shibuCode = jigyo.Juji_Jimusyo_Hojin__r?.Jims_Sibu_Code__c;
+            result.jigyo.shibuName = jigyo.Juji_Jimusyo_Hojin__r?.Jims_Sibu_Name__c;
+            result.jigyo.basyoName = jigyo.Juji_Juji_Basyo_Master__r?.JujM_Juji_Basyo_Name__c;
             result.jujishaName = jujisha.name;
 
-            // (2)③ 本人割当済の時間帯
+            // 本人の割当（割当フラグ＝1 または 確定フラグ＝1）の時間帯
             result.ownAssigned = selectOwnAssignments(jigyo.Id, jujisha);
 
-            // (3)① 実施日の範囲（最も早い実施日・最も遅い実施日）。実施日がない場合は null
+            // 最も早い実施日・最も遅い実施日（実施日の最小値・最大値）。実施日がない場合は null
             AggregateResult agg = [
-                SELECT MIN(実施日__c) minDate, MAX(実施日__c) maxDate
-                FROM 従事事業明細__c
-                WHERE 従事事業__c = :jigyo.Id
+                SELECT MIN(Juji_Meisai_Jisi_Nengapi__c) minDate, MAX(Juji_Meisai_Jisi_Nengapi__c) maxDate
+                FROM Juji_Jigyo_Meisai__c
+                WHERE Juji_Meisai_Juji_Jigyo__c = :jigyo.Id
                 WITH USER_MODE
             ];
             result.minJisshibi = toDateText((Date) agg.get('minDate'));
@@ -72,8 +73,8 @@ public with sharing class JUJ081Controller {
         }
     }
 
-    // ==================== 4.(1) 一覧の表示 ====================
-    // 引数：fromDate・toDate（'yyyy-MM-dd'。表示期間の開始日・終了日）
+    // ==================== 画面アクション No.34 一覧表示：5.データ更新 (6) ====================
+    // 引数：fromDate・toDate（'yyyy-MM-dd'。表示期間（表示年月の1日〜末日））
     // 戻り値：表示期間内の実施日のリスト
     //   [{ jisshibi, boshuNinzu, startTime, endTime, biko, wariateNinzu,
     //      timeSlots: [{ startTime, endTime, count, wariateNinzu }] }]
@@ -82,43 +83,44 @@ public with sharing class JUJ081Controller {
         String jujiJigyoNo, String jujiBasyoNo, String jisiNendo, String fromDate, String toDate
     ) {
         try {
-            従事事業__c jigyo = selectJigyo(jujiJigyoNo, jujiBasyoNo, jisiNendo);
+            Juji_Jigyo__c jigyo = selectJigyo(jujiJigyoNo, jujiBasyoNo, jisiNendo);
             if (jigyo == null) {
                 throw error(E_JIGYO_NOT_FOUND);
             }
             Date fromD = Date.valueOf(fromDate);
             Date toD = Date.valueOf(toDate);
 
-            // ③ 実施日
-            List<従事事業明細__c> recs = [
-                SELECT 実施日__c, 募集人数__c, 開始時間__c, 終了時間__c, 備考__c, 時間帯__c
-                FROM 従事事業明細__c
-                WHERE 従事事業__c = :jigyo.Id
-                AND 実施日__c >= :fromD
-                AND 実施日__c <= :toD
+            // ① 従事事業明細（実施日）の取得（実施日の昇順）
+            List<Juji_Jigyo_Meisai__c> recs = [
+                SELECT Juji_Meisai_Jisi_Nengapi__c, Juji_Meisai_Bosyu_Ninzu__c, Juji_Meisai_Kaisi_Jikoku__c,
+                    Juji_Meisai_Syuryo_Jikoku__c, Juji_Meisai_Biko__c, Juji_Meisai_JisshiJikantai_Meisai__c
+                FROM Juji_Jigyo_Meisai__c
+                WHERE Juji_Meisai_Juji_Jigyo__c = :jigyo.Id
+                AND Juji_Meisai_Jisi_Nengapi__c >= :fromD
+                AND Juji_Meisai_Jisi_Nengapi__c <= :toD
                 WITH USER_MODE
-                ORDER BY 実施日__c
+                ORDER BY Juji_Meisai_Jisi_Nengapi__c
             ];
 
-            // ⑤ 確定した割当（日付ごと）
+            // ② 従事事業割当（確定）の取得（日付ごと）
             Map<Date, List<Assignment>> assignments = selectConfirmedAssignments(jigyo.Id, fromD, toD);
 
             List<Map<String, Object>> days = new List<Map<String, Object>>();
-            for (従事事業明細__c rec : recs) {
-                List<Assignment> dayAssignments = assignments.containsKey(rec.実施日__c)
-                    ? assignments.get(rec.実施日__c)
+            for (Juji_Jigyo_Meisai__c rec : recs) {
+                List<Assignment> dayAssignments = assignments.containsKey(rec.Juji_Meisai_Jisi_Nengapi__c)
+                    ? assignments.get(rec.Juji_Meisai_Jisi_Nengapi__c)
                     : new List<Assignment>();
                 DayInfo day = new DayInfo();
-                day.jisshibi = toDateText(rec.実施日__c);
-                day.boshuNinzu = rec.募集人数__c;
-                day.startTime = toTimeText(rec.開始時間__c);
-                day.endTime = toTimeText(rec.終了時間__c);
-                day.biko = rec.備考__c;
-                // a. 日付行：その日の割当の件数
+                day.jisshibi = toDateText(rec.Juji_Meisai_Jisi_Nengapi__c);
+                day.boshuNinzu = rec.Juji_Meisai_Bosyu_Ninzu__c;
+                day.startTime = toTimeText(rec.Juji_Meisai_Kaisi_Jikoku__c);
+                day.endTime = toTimeText(rec.Juji_Meisai_Syuryo_Jikoku__c);
+                day.biko = rec.Juji_Meisai_Biko__c;
+                // 割当人数（3.表示ラベル No.63）日付行：その日の割当の件数
                 day.wariateNinzu = dayAssignments.size();
-                // ④ 時間帯行（開始時間の昇順）。b. 割当人数：その時間帯を含む割当の件数
+                // 時間帯行（開始時間の昇順）。割当人数：その時間帯を含む割当の件数
                 day.timeSlots = new List<SlotInfo>();
-                for (SlotInfo slot : sortSlots(parseSlots(rec.時間帯__c))) {
+                for (SlotInfo slot : sortSlots(parseSlots(rec.Juji_Meisai_JisshiJikantai_Meisai__c))) {
                     slot.wariateNinzu = 0;
                     for (Assignment a : dayAssignments) {
                         if (a.slotKeys.contains(slotKey(slot.startTime, slot.endTime))) {
@@ -135,12 +137,12 @@ public with sharing class JUJ081Controller {
         }
     }
 
-    // ==================== 3.(1) 保存ボタン押下時の入力チェック ====================
+    // ==================== 画面アクション No.30 保存：4.入力チェック No.23 ====================
     // 一括割当実行中の場合はエラー
     @AuraEnabled
     public static void checkSave(String jujiJigyoNo, String jujiBasyoNo, String jisiNendo) {
         try {
-            従事事業__c jigyo = selectJigyo(jujiJigyoNo, jujiBasyoNo, jisiNendo);
+            Juji_Jigyo__c jigyo = selectJigyo(jujiJigyoNo, jujiBasyoNo, jisiNendo);
             if (jigyo == null) {
                 throw error(E_JIGYO_NOT_FOUND);
             }
@@ -152,16 +154,17 @@ public with sharing class JUJ081Controller {
 
     // ==================== Selector ====================
     // 従事事業（3項目のいずれかが未入力の場合はクエリを発行しない）
-    private static 従事事業__c selectJigyo(String jigyoNo, String basyoNo, String nendo) {
+    private static Juji_Jigyo__c selectJigyo(String jigyoNo, String basyoNo, String nendo) {
         if (String.isBlank(jigyoNo) || String.isBlank(basyoNo) || String.isBlank(nendo)) {
             return null;
         }
-        List<従事事業__c> recs = [
-            SELECT Id, 従事事業名__c, 支部__r.支部コード__c, 支部__r.Name, 従事場所__r.従事場所名__c
-            FROM 従事事業__c
-            WHERE 従事事業No__c = :jigyoNo
-            AND 従事場所__r.従事場所No__c = :basyoNo
-            AND 実施年度__c = :nendo
+        List<Juji_Jigyo__c> recs = [
+            SELECT Id, Juji_Juji_Jigyo_Name__c, Juji_Jimusyo_Hojin__r.Jims_Sibu_Code__c,
+                Juji_Jimusyo_Hojin__r.Jims_Sibu_Name__c, Juji_Juji_Basyo_Master__r.JujM_Juji_Basyo_Name__c
+            FROM Juji_Jigyo__c
+            WHERE Juji_Juji_Jigyo_No__c = :jigyoNo
+            AND Juji_Juji_Basyo_Master__r.JujM_Juji_Basyo_No__c = :basyoNo
+            AND Juji_Jisi_Nendo__c = :nendo
             WITH USER_MODE
             LIMIT 1
         ];
@@ -174,7 +177,7 @@ public with sharing class JUJ081Controller {
             return null;
         }
         List<Contact> members = [
-            SELECT Id, Name FROM Contact WHERE 登録番号__c = :jujishaNo WITH USER_MODE LIMIT 1
+            SELECT Id, Name FROM Contact WHERE Kaii_Toroku_No__c = :jujishaNo WITH USER_MODE LIMIT 1
         ];
         if (!members.isEmpty()) {
             Jujisha j = new Jujisha();
@@ -182,13 +185,17 @@ public with sharing class JUJ081Controller {
             j.name = members[0].Name;
             return j;
         }
-        List<相談員__c> sodanins = [
-            SELECT Id, 氏名__c FROM 相談員__c WHERE 相談員番号__c = :jujishaNo WITH USER_MODE LIMIT 1
+        List<Soudanin_Master__c> sodanins = [
+            SELECT Id, SouM_Sodanin_Name__c
+            FROM Soudanin_Master__c
+            WHERE SouM_Sodanin_No__c = :jujishaNo
+            WITH USER_MODE
+            LIMIT 1
         ];
         if (!sodanins.isEmpty()) {
             Jujisha j = new Jujisha();
             j.sodaninId = sodanins[0].Id;
-            j.name = sodanins[0].氏名__c;
+            j.name = sodanins[0].SouM_Sodanin_Name__c;
             return j;
         }
         return null;
@@ -196,31 +203,31 @@ public with sharing class JUJ081Controller {
 
     // ==================== 割当（従事事業割当）====================
     // ※ 1件＝ある日に1人を割り当てたもの。従事事業の主従子オブジェクトで、会員・相談員を参照する。
-    //   仮割当＝割当フラグ＝1、確定＝確定フラグ＝1。時間帯項目に従事する時間帯を JSON で保持する。
+    //   仮割当＝割当フラグ＝1、確定＝確定フラグ＝1。実施時間帯明細に従事する時間帯を JSON で保持する。
 
-    // 1.(2)③ 本人の割当（仮割当を含む）の時間帯（日付ごと）
+    // 画面アクション No.21 本人の割当（仮割当を含む）の時間帯（日付ごと）
     @TestVisible
     private static List<KanoubiDate> selectOwnAssignments(Id jigyoId, Jujisha jujisha) {
         Id memberId = jujisha.memberId;
         Id sodaninId = jujisha.sodaninId;
-        List<従事事業割当__c> recs = [
-            SELECT 従事日__c, 時間帯__c
-            FROM 従事事業割当__c
-            WHERE 従事事業__c = :jigyoId
-            AND 会員__c = :memberId
-            AND 相談員__c = :sodaninId
-            AND (割当フラグ__c = :FLAG_ON OR 確定フラグ__c = :FLAG_ON)
+        List<Juji_Jigyo_Wariate__c> recs = [
+            SELECT Wari_Juji_Nengapi__c, Wari_JisshiJikantai_Meisai__c
+            FROM Juji_Jigyo_Wariate__c
+            WHERE Wari_Juji_Jigyo__c = :jigyoId
+            AND Wari_Kaiin__c = :memberId
+            AND Wari_Soudanin_Master__c = :sodaninId
+            AND (Wari_Wriate_Flag__c = :FLAG_ON OR Wari_Kakutei_Flag__c = :FLAG_ON)
             WITH USER_MODE
-            ORDER BY 従事日__c
+            ORDER BY Wari_Juji_Nengapi__c
         ];
         // 同じ日に複数件ある場合は時間帯をまとめる
         Map<Date, Set<String>> keysByDate = new Map<Date, Set<String>>();
-        for (従事事業割当__c rec : recs) {
-            if (!keysByDate.containsKey(rec.従事日__c)) {
-                keysByDate.put(rec.従事日__c, new Set<String>());
+        for (Juji_Jigyo_Wariate__c rec : recs) {
+            if (!keysByDate.containsKey(rec.Wari_Juji_Nengapi__c)) {
+                keysByDate.put(rec.Wari_Juji_Nengapi__c, new Set<String>());
             }
-            for (SlotInfo slot : parseSlots(rec.時間帯__c)) {
-                keysByDate.get(rec.従事日__c).add(slotKey(slot.startTime, slot.endTime));
+            for (SlotInfo slot : parseSlots(rec.Wari_JisshiJikantai_Meisai__c)) {
+                keysByDate.get(rec.Wari_Juji_Nengapi__c).add(slotKey(slot.startTime, slot.endTime));
             }
         }
         List<KanoubiDate> result = new List<KanoubiDate>();
@@ -239,33 +246,33 @@ public with sharing class JUJ081Controller {
         return result;
     }
 
-    // 4.(1)⑤ 表示期間内の確定した割当（日付ごと）
+    // 5.データ更新 (6)② 表示期間内の確定した割当（日付ごと）
     @TestVisible
     private static Map<Date, List<Assignment>> selectConfirmedAssignments(Id jigyoId, Date fromD, Date toD) {
         Map<Date, List<Assignment>> result = new Map<Date, List<Assignment>>();
-        for (従事事業割当__c rec : [
-            SELECT 従事日__c, 時間帯__c
-            FROM 従事事業割当__c
-            WHERE 従事事業__c = :jigyoId
-            AND 従事日__c >= :fromD
-            AND 従事日__c <= :toD
-            AND 確定フラグ__c = :FLAG_ON
+        for (Juji_Jigyo_Wariate__c rec : [
+            SELECT Wari_Juji_Nengapi__c, Wari_JisshiJikantai_Meisai__c
+            FROM Juji_Jigyo_Wariate__c
+            WHERE Wari_Juji_Jigyo__c = :jigyoId
+            AND Wari_Juji_Nengapi__c >= :fromD
+            AND Wari_Juji_Nengapi__c <= :toD
+            AND Wari_Kakutei_Flag__c = :FLAG_ON
             WITH USER_MODE
         ]) {
             Assignment a = new Assignment();
-            for (SlotInfo slot : parseSlots(rec.時間帯__c)) {
+            for (SlotInfo slot : parseSlots(rec.Wari_JisshiJikantai_Meisai__c)) {
                 a.slotKeys.add(slotKey(slot.startTime, slot.endTime));
             }
-            if (!result.containsKey(rec.従事日__c)) {
-                result.put(rec.従事日__c, new List<Assignment>());
+            if (!result.containsKey(rec.Wari_Juji_Nengapi__c)) {
+                result.put(rec.Wari_Juji_Nengapi__c, new List<Assignment>());
             }
-            result.get(rec.従事日__c).add(a);
+            result.get(rec.Wari_Juji_Nengapi__c).add(a);
         }
         return result;
     }
 
     // ==================== 変換 ====================
-    // 時間帯 JSON → 時間帯リスト（未設定・形式不正の場合は空。使用しない項目は無視する）
+    // 実施時間帯明細（JSON）→ 時間帯リスト（未設定・形式不正の場合は空。使用しない項目は無視する）
     @TestVisible
     private static List<SlotInfo> parseSlots(String value) {
         if (String.isBlank(value)) {
@@ -305,7 +312,7 @@ public with sharing class JUJ081Controller {
         return d == null ? null : String.valueOf(d); // 'yyyy-MM-dd'
     }
 
-    // 【要確認】開始時間・終了時間の型（時間型・テキスト型のいずれでも 'HH:mm' にする）
+    // 開始時間・終了時間（時間型）→ 'HH:mm'（時間型以外の値はそのまま文字列にする）
     @TestVisible
     private static String toTimeText(Object value) {
         if (value == null) {
@@ -373,7 +380,7 @@ public with sharing class JUJ081Controller {
         public List<SlotInfo> timeSlots;
     }
 
-    // 時間帯（従事事業明細の時間帯項目の1要素。count＝募集人数）
+    // 時間帯（従事事業明細の実施時間帯明細の1要素。count＝募集人数）
     public class SlotInfo {
         public String startTime;
         public String endTime;

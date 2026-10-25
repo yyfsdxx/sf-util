@@ -124,7 +124,7 @@
 
                         <!-- 3行目: 従事場所No. -->
                         <div class="slds-form-element">
-                            <label class="slds-form-element__label">従事場所No.</label>
+                            <label class="slds-form-element__label">{labels.jujiBasyoNo}</label>
                             <div class="slds-form-element__control slds-grid slds-vertical-align-center">
                                 <div class="slds-col slds-grid slds-vertical-align-center slds-gutters_xx-small">
                                     <div class="slds-col slds-size_4-of-12">
@@ -561,20 +561,20 @@
 
     <!-- 共通の検索子画面（検索条件の初期値は渡さない） -->
     <template if:true={isJigyoSearchOpen}>
-        <c-juj110 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj110>
+        <c-juj_-jigyo-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-jigyo-kensaku>
     </template>
     <template if:true={isBasyoSearchOpen}>
-        <c-juj120 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj120>
+        <c-juj_-basho-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-basho-kensaku>
     </template>
     <template if:true={isShibuSearchOpen}>
-        <c-juj130 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj130>
+        <c-juj_-shibu-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-shibu-kensaku>
     </template>
     <!-- 登録番号の検索ボタンをコメントアウトしたため未使用（2026/10/20）
     <template if:true={isJujishaSearchOpen}>
-        <c-juj140 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj140>
+        <c-juj_-taishosha-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-taishosha-kensaku>
     </template>
     -->
     <template if:true={isSodaninSearchOpen}>
-        <c-juj150 z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj150>
+        <c-juj_-sodanin-joho-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-sodanin-joho-kensaku>
     </template>
 </template>

@@ -76,7 +76,7 @@
                             </div>
                             <div class="slds-col slds-size_1-of-2">
                                 <div class="slds-form-element">
-                                    <label class="slds-form-element__label">支部名</label>
+                                    <label class="slds-form-element__label">{labels.shibuName}</label>
                                     <div class="custom-underline-output">{jigyo.shibuName}</div>
                                 </div>
                             </div>
@@ -90,7 +90,7 @@
                             <div class="slds-grid slds-gutters">
                                 <div class="slds-col slds-size_1-of-2">
                                     <div class="slds-form-element">
-                                        <label class="slds-form-element__label">従事場所No.</label>
+                                        <label class="slds-form-element__label">{labels.jujiBasyoNo}</label>
                                         <div class="slds-form-element__control slds-grid slds-gutters_xx-small">
                                             <div class="slds-col">
                                                 <lightning-input type="text" variant="label-hidden" name="jujiBashoNo" value={jigyoKey.jujiBasyoNo} data-field="jujiBasyoNo" data-required="jigyoKey" onblur={handleJigyoKeyBlur}></lightning-input>
@@ -103,7 +103,7 @@
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
                                     <div class="slds-form-element">
-                                        <label class="slds-form-element__label">従事場所名</label>
+                                        <label class="slds-form-element__label">{labels.basyoName}</label>
                                         <div class="slds-form-element__control" style="height: 32px; display: flex; align-items: center; border-bottom: 1px solid #dddbda;">
                                             <div class="slds-form-element__static" style="padding: 0; width: 100%">{basyoName}</div>
                                         </div>
@@ -115,13 +115,13 @@
                             <div class="slds-grid slds-gutters_x-small">
                                 <div class="slds-col slds-size_1-of-2">
                                     <div class="slds-form-element">
-                                        <label class="slds-form-element__label">従事場所No.</label>
+                                        <label class="slds-form-element__label">{labels.jujiBasyoNo}</label>
                                         <div class="custom-underline-output">{jigyoKey.jujiBasyoNo}</div>
                                     </div>
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
                                     <div class="slds-form-element">
-                                        <label class="slds-form-element__label">従事場所名</label>
+                                        <label class="slds-form-element__label">{labels.basyoName}</label>
                                         <div class="custom-underline-output">{basyoName}</div>
                                     </div>
                                 </div>
@@ -161,7 +161,7 @@
                     <lightning-layout-item size="6" padding="horizontal-small">
                         <div class="slds-grid slds-grid_vertical-align-end slds-gutters_x-small">
                             <div class="slds-col slds-size_2-of-4">
-                                <lightning-input type="text" label="登録番号/相談員番号" value={jujishaNo} data-field="jujishaNo" data-required="jujisha" onblur={handleJujishaNoBlur}></lightning-input>
+                                <lightning-input type="text" label={labels.jujishaNo} value={jujishaNo} data-field="jujishaNo" data-required="jujisha" onblur={handleJujishaNoBlur}></lightning-input>
                             </div>
                             <div class="slds-grow-none" style="margin-bottom: 2px">
                                 <lightning-button label="検索" onclick={handleJujishaSearchClick}></lightning-button>
@@ -258,14 +258,14 @@
                     <lightning-layout-item size="6" padding="horizontal-small">
                         <div class="slds-grid slds-grid_vertical-align-end slds-gutters_x-small">
                             <div class="slds-col slds-size_1-of-4">
-                                <lightning-input type="number" label={labels.kibouNissu} value={form.kibouNissu} data-field="kibouNissu" data-validate="true" onchange={handleFormChange} required={isKibouNissuRequired} disabled={isApplicationDisabled}></lightning-input>
+                                <lightning-input type="number" label={labels.kibouNissu} value={form.kibouNissu} data-field="kibouNissu" data-validate="true" onchange={handleFormChange} required={isKibouNissuRequired} disabled={isApplicationDisabled} min="1" max="999" step="1" message-when-value-missing={kibouNissuRequiredMessage} message-when-bad-input={kibouNissuFormatMessage} message-when-step-mismatch={kibouNissuFormatMessage} message-when-range-underflow={kibouNissuFormatMessage} message-when-range-overflow={kibouNissuFormatMessage}></lightning-input>
                             </div>
                             <div class="slds-col slds-size_3-of-4">
                                 <div class="slds-form-element">
                                     <label class="slds-form-element__label">{labels.keiken}</label>
                                     <div class="slds-form-element__control slds-grid" style="gap: 1.5rem; padding-top: 0.2rem">
-                                        <lightning-input type="radio" label="有" name="experience" value="1" checked={isKeiKenAri} onchange={handleKeikenChange} disabled={isApplicationDisabled}></lightning-input>
-                                        <lightning-input type="radio" label="無" name="experience" value="0" checked={isKeiKenNashi} onchange={handleKeikenChange} disabled={isApplicationDisabled}></lightning-input>
+                                        <lightning-input type="radio" label="有" name="experience" value={keikenAri} checked={isKeiKenAri} onchange={handleKeikenChange} disabled={isApplicationDisabled}></lightning-input>
+                                        <lightning-input type="radio" label="無" name="experience" value={keikenNashi} checked={isKeiKenNashi} onchange={handleKeikenChange} disabled={isApplicationDisabled}></lightning-input>
                                     </div>
                                 </div>
                             </div>
@@ -275,7 +275,7 @@
                     <!-- 第5行以降 -->
                     <lightning-layout-item size="6" padding="horizontal-small">
                         <div class="slds-form-element slds-m-bottom_small">
-                            <label class="slds-form-element__label">支部名</label>
+                            <label class="slds-form-element__label">{labels.shibuName}</label>
                             <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.shibuName}</div></div>
                         </div>
                         <div class="slds-form-element slds-m-bottom_small">
@@ -347,47 +347,47 @@
 
     <!-- 従事可能日指定（JUJ081）：子コンポーネントとしてモーダル表示する -->
     <template if:true={isKanoubiOpen}>
-        <c-juj081
+        <c-juj_-jyujijigyou-jisshibi-shitei
             jigyo-key={jigyoKey}
             jujisha-no={jujishaNo}
             kanoubi-dates={kanoubiDates}
             onsave={handleKanoubiSave}
             onclose={handleKanoubiClose}
-        ></c-juj081>
+        ></c-juj_-jyujijigyou-jisshibi-shitei>
     </template>
 
     <!-- 応募情報検索（JUJ082）：子コンポーネントとしてモーダル表示する -->
     <template if:true={isApplicationSearchOpen}>
-        <c-juj082
+        <c-juj_-oubojouhoukensaku-model
             jigyo-key={jigyoKey}
             jigyo={jigyo}
             basyo-name={basyoName}
             key-readonly={isJigyoKeyReadonly}
             onselect={handleApplicationSearchSelect}
             onclose={handleApplicationSearchClose}
-        ></c-juj082>
+        ></c-juj_-oubojouhoukensaku-model>
     </template>
 
     <!-- 共通の検索子画面（検索条件の初期値は渡さない） -->
     <template if:true={isJigyoSearchOpen}>
-        <c-juj110
+        <c-juj_-jigyo-kensaku
             z-index-level={subScreenLevel}
             onselect={handleJigyoSearchSelect}
             onclose={handleJigyoSearchClose}
-        ></c-juj110>
+        ></c-juj_-jigyo-kensaku>
     </template>
     <template if:true={isBasyoSearchOpen}>
-        <c-juj120
+        <c-juj_-basho-kensaku
             z-index-level={subScreenLevel}
             onselect={handleBasyoSearchSelect}
             onclose={handleBasyoSearchClose}
-        ></c-juj120>
+        ></c-juj_-basho-kensaku>
     </template>
     <template if:true={isJujishaSearchOpen}>
-        <c-juj140
+        <c-juj_-taishosha-kensaku
             z-index-level={subScreenLevel}
             onselect={handleJujishaSearchSelect}
             onclose={handleJujishaSearchClose}
-        ></c-juj140>
+        ></c-juj_-taishosha-kensaku>
     </template>
 </template>
