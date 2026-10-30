@@ -1,5 +1,5 @@
 <template>
-    <!-- モーダル全体（大サイズを指定してテーブルがはみ出さないようにする） -->
+    <!-- モーダル（一覧がはみ出さないよう大サイズ） -->
     <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_medium">
         <div class="slds-modal__container">
             <!-- モーダルヘッダー -->
@@ -15,13 +15,13 @@
                 <h3 class="slds-text-heading_medium slds-hyphenate" style="font-weight: bold">従事可能日指定</h3>
             </header>
 
-            <!-- モーダルボディ -->
-            <div class="slds-modal__content slds-p-around_medium">
+            <!-- モーダルボディ（スクロールが端に達しても背面の画面をスクロールさせない） -->
+            <div class="slds-modal__content slds-p-around_medium" style="overscroll-behavior: contain">
                 <template if:true={isLoading}>
                     <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
                 </template>
 
-                <!-- エラーメッセージ（業務チェック・サーバエラー） -->
+                <!-- エラーメッセージ -->
                 <template if:true={hasHeaderMessages}>
                     <div class="slds-text-color_error slds-m-bottom_medium slds-p-left_medium">
                         <ul class="slds-list_dotted">
@@ -32,7 +32,7 @@
                     </div>
                 </template>
 
-                <!-- 検索条件などのヘッダー情報エリア（図2の2カラムレイアウトに修正） -->
+                <!-- ヘッダー部 -->
                 <div class="slds-p-horizontal_small">
                     <!-- 1行目: 従事事業No. / 従事事業名 -->
                     <div class="slds-grid slds-gutters">
@@ -105,7 +105,7 @@
                             </div>
                         </div>
                         <div class="slds-col slds-size_1-of-2">
-                            <!-- レイアウト維持のための空カラム -->
+                            <!-- レイアウト用の空カラム -->
                         </div>
                     </div>
                     <!-- 5行目: 登録番号 -->
@@ -129,7 +129,7 @@
                     </div>
                 </div>
 
-                <!-- カレンダー表示コントロールと凡例エリア -->
+                <!-- 表示年月・凡例 -->
                 <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-vertical_small">
                     <div style="min-width: 180px"></div>
 
@@ -158,7 +158,7 @@
                     </div>
 
                     <div style="min-width: 180px" class="slds-text-align_right">
-                        <!-- 割当と募集のインラインスタイルによる確実な色指定 -->
+                        <!-- 凡例（割当・募集） -->
                         <span
                             class="slds-m-right_x-small"
                             style="
@@ -183,14 +183,14 @@
                     </div>
                 </div>
 
-                <!-- データテーブルエリア -->
-                <div class="slds-scrollable_y" style="height: 350px; width: 100%">
+                <!-- 一覧 -->
+                <div class="slds-scrollable_y" style="height: 350px; width: 100%; overscroll-behavior: contain">
                     <table
                         class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_col-bordered custom-table"
                     >
                         <thead>
                             <tr class="slds-line-height_reset">
-                                <!-- 全選択マスターチェックボックス -->
+                                <!-- 全選択チェックボックス -->
                                 <th scope="col" style="width: 40px" class="slds-text-align_center">
                                     <lightning-input
                                         type="checkbox"
@@ -373,7 +373,7 @@
                             <template for:each={calendarRows} for:item="row">
                                 <!-- 日付行 -->
                                 <tr key={row.id} class={row.rowClass}>
-                                    <!-- 行単位のチェックボックス（ON：その日の時間帯をすべて選択、OFF：すべて解除） -->
+                                    <!-- 日付行のチェックボックス（その日の時間帯を一括で選択・解除） -->
                                     <td class="slds-text-align_center">
                                         <lightning-input
                                             type="checkbox"
@@ -461,7 +461,7 @@
                 </div>
             </div>
 
-            <!-- モーダルフッター（アクションボタン） -->
+            <!-- モーダルフッター -->
             <footer class="slds-modal__footer slds-grid slds-grid_align-spread">
                 <!-- 左側のボタン群 -->
                 <div class="slds-grid">
@@ -505,6 +505,31 @@
         </div>
     </section>
 
-    <!-- モーダルの背景の黒いオーバーレイ -->
+    <!-- モーダルの背景 -->
     <div class="slds-backdrop slds-backdrop_open" role="presentation"></div>
+
+    <!-- 確認ダイアログ（はい／いいえ、×ボタンなし）。本画面のモーダルより手前に表示する -->
+    <template if:true={isConfirmOpen}>
+        <section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open" style="z-index: 9003">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <h2 class="slds-modal__title slds-hyphenate">{confirm.label}</h2>
+                </header>
+                <div class="slds-modal__content slds-p-around_medium slds-text-align_center">
+                    <p style="white-space: pre-line">{confirm.message}</p>
+                </div>
+                <footer class="slds-modal__footer">
+                    <div class="slds-grid slds-grid_align-center slds-gutters">
+                        <div class="slds-col">
+                            <lightning-button variant="brand" label="はい" onclick={handleConfirmYes}></lightning-button>
+                        </div>
+                        <div class="slds-col">
+                            <lightning-button label="いいえ" onclick={handleConfirmNo}></lightning-button>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open" style="z-index: 9002"></div>
+    </template>
 </template>

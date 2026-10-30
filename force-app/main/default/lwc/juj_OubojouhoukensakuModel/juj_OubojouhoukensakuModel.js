@@ -1,8 +1,5 @@
 /**
  * JUJ082 応募情報検索（JUJ080 の子コンポーネントとしてモーダル表示する）
- * 設計書：機能設計書 処理詳細（JUJ080／081／082 共通シート）
- * コメント中の番号は「1.画面アクション No.」「3.表示ラベル No.」「4.入力チェック No.」「5.データ更新 (n)」に対応する。
- * 【要確認】は QA・メタデータの確定後に修正する。
  *
  * 呼出し元（JUJ080）：
  *   <c-juj_-oubojouhoukensaku-model jigyo-key={jigyoKey} jigyo={jigyo} basyo-name={basyoName} key-readonly={isJigyoKeyReadonly}
@@ -13,25 +10,24 @@
  */
 import { LightningElement, api, wire } from 'lwc';
 import { getObjectInfos } from 'lightning/uiObjectInfoApi';
-// 共通：汎用マスタの対象年度（取得できない場合は ''）
+// 汎用マスタの対象年度（取得できない場合は ''）
 import getHanyouMasterTaisyoNendo from '@salesforce/apex/Juj_CommonController.getHanyouMasterTaisyoNendo';
 
-// ========== Apex（未デプロイのため一時的にコメントアウト。デプロイ後は import を戻し、下のスタブを削除する）==========
-// import search from '@salesforce/apex/Juj_OubojouhoukensakuModelController.search';
-// import getJigyo from '@salesforce/apex/Juj_OubojouhoukensakuModelController.getJigyo';
-// import getName from '@salesforce/apex/Juj_OubojouhoukensakuModelController.getName';
+import search from '@salesforce/apex/Juj_OubojouhoukensakuModelController.search';
+import getJigyo from '@salesforce/apex/Juj_OubojouhoukensakuModelController.getJigyo';
+import getName from '@salesforce/apex/Juj_OubojouhoukensakuModelController.getName';
 
-// メッセージ。末尾は 4.入力チェックの No.【要確認 QA-20】文言・ID
+// メッセージ【要確認 QA-20】
 const MSG = {
-    RANGE: (label) => `${label}(From)は${label}(To)以下の値を入力してください。`, // No.24〜27（項目名は画面の項目ラベル）
-    NENDO_FORMAT: '実施年度は4桁の半角数字（西暦）で入力してください。', // No.28（項目の下に表示）
+    RANGE: (label) => `${label}(From)は${label}(To)以下の値を入力してください。`,
+    NENDO_FORMAT: '実施年度は4桁の半角数字（西暦）で入力してください。',
     UNEXPECTED: '予期しないエラーが発生しました。'
 };
 
 // 実施年度：半角数字4桁（西暦）
 const NENDO_PATTERN = /^[0-9]{4}$/;
 
-// 項目ラベルの取得元オブジェクト（3.表示ラベルの「項目ラベル取得元」）
+// 項目ラベルの取得元オブジェクト
 const OBO_OBJECT = 'Juji_Jigyo_Oubo__c'; // 従事事業応募
 const JIGYO_OBJECT = 'Juji_Jigyo__c'; // 従事事業
 const BASYO_OBJECT = 'Juji_Basyo_Master__c'; // 従事場所マスタ
@@ -39,8 +35,7 @@ const MEMBER_OBJECT = 'Contact'; // 会員（取引先責任者）
 const SODANIN_OBJECT = 'Soudanin_Master__c'; // 相談員マスタ
 const OFFICE_OBJECT = 'Account'; // 事務所・法人
 
-// 画面項目 → [オブジェクト, 項目名, 既定ラベル]。ラベルはメタデータから取得し、取得できない場合は既定ラベルを表示する
-// （検索条件・検索結果の列名で共通。列名は検索した項目のオブジェクトから取得する）
+// 画面項目 → [オブジェクト, 項目名, 既定ラベル]（項目ラベルを取得できない場合は既定ラベル。検索条件・検索結果の列名で共通）
 const LABEL_FIELDS = {
     jujiJigyoNo: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_No__c', '従事事業No.'],
     jigyoName: [JIGYO_OBJECT, 'Juji_Juji_Jigyo_Name__c', '従事事業名'],
@@ -54,7 +49,7 @@ const LABEL_FIELDS = {
     name: [SODANIN_OBJECT, 'SouM_Sodanin_Name__c', '氏名']
 };
 
-// 4.入力チェック No.24〜27 From／To の組（画面項目名, 数値比較か）。エラーメッセージには画面項目のラベルを使用する
+// 相関（区間）チェックの From／To（画面項目名, 数値比較か）
 const RANGES = [
     ['uketukeNo', true],
     ['torokuNo', false],
@@ -62,15 +57,14 @@ const RANGES = [
     ['sodaninNo', false]
 ];
 
-// 番号 → 名称取得の種別（Apex の getName の nameType。画面アクション No.39）
+// 番号 → 名称取得の種別（Apex getName の nameType）
 const NAME_TYPES = {
     torokuNo: 'TOROKU', // 登録番号 → 会員氏名
     shibuCode: 'SHIBU', // 支部コード → 支部名
     sodaninNo: 'SODANIN' // 相談員番号 → 相談員氏名
 };
 
-// 検索結果の列（3.表示ラベル No.87〜97。現行 WLP008 と同じ列）
-// 列名は labels を設定する。登録日時は固定
+// 検索結果の列（列名は labels から設定する。登録日時は固定）
 const buildColumns = (labels) => [
     {
         type: 'button',
@@ -89,7 +83,7 @@ const buildColumns = (labels) => [
     { label: '登録日時', fieldName: 'createdDate', sortable: true }
 ];
 
-// 共通の検索子画面に渡す重なり順（本画面自体がモーダルのため 2）
+// 共通の検索子画面の重なり順（本画面がモーダルのため 2）
 const SUB_SCREEN_LEVEL = 2;
 const SUB_JIGYO = 'JUJ110'; // 従事事業検索
 const SUB_BASYO = 'JUJ120'; // 従事場所検索
@@ -97,7 +91,7 @@ const SUB_SHIBU = 'JUJ130'; // 支部検索
 const SUB_JUJISHA = 'JUJ140'; // 従事対象者検索
 const SUB_SODANIN = 'JUJ150'; // 相談員情報検索
 
-// 共通の検索子画面の戻り値（数値で返る場合も文字列として扱う）
+// 検索子画面の戻り値は数値の場合もあるため文字列にする
 const toText = (value) => (value == null ? '' : String(value));
 
 const emptyKey = () => ({ jujiJigyoNo: '', jujiBasyoNo: '', jisiNendo: '' });
@@ -124,51 +118,12 @@ const emptyNames = () => ({
     sodaninNoTo: ''
 });
 
-// ========== スタブ（Apex デプロイ後に削除）==========
-// テストデータ（JUJ080 のスタブと同じ応募ID・番号）
-//   事業A：0000001 / 0000000001 / 2026（応募 3件）、事業B：0000002 / 0000000002 / 2026（応募 1件）。それ以外の事業キー → 0件
-//   ※ 検索条件（受付番号・番号・氏名等）では絞り込まない。従事事業キーのみで絞り込む
-//   番号の名称：1000001 山田 太郎・1000002 佐藤 花子（会員）、9000001 山田 一郎（相談員）、001 東支部・002 西支部
-const STUB_JIGYO_LIST = [
-    { key: { jujiJigyoNo: '0000001', jujiBasyoNo: '0000000001', jisiNendo: '2026' }, jigyoName: 'テスト事業A', shibuCode: '001', shibuName: '東支部', basyoName: 'テスト場所A' },
-    { key: { jujiJigyoNo: '0000002', jujiBasyoNo: '0000000002', jisiNendo: '2026' }, jigyoName: 'テスト事業B', shibuCode: '002', shibuName: '西支部', basyoName: 'テスト場所B' }
-];
-const STUB_ROWS = [
-    { jigyoNo: '0000001', applicationId: 'a00000000000001AAA', uketukeNo: 1, torokuNo: '1000002', sodaninNo: null, name: '佐藤 花子', createdDate: '2026/10/01 10:00:00' },
-    { jigyoNo: '0000001', applicationId: 'a00000000000002AAA', uketukeNo: 2, torokuNo: '1000001', sodaninNo: null, name: '山田 太郎', createdDate: '2026/10/02 11:30:00' },
-    { jigyoNo: '0000001', applicationId: 'a00000000000003AAA', uketukeNo: 0, torokuNo: null, sodaninNo: '9000001', name: '山田 一郎', createdDate: '2026/10/03 09:15:00' },
-    { jigyoNo: '0000002', applicationId: 'a00000000000004AAA', uketukeNo: 1, torokuNo: '1000001', sodaninNo: null, name: '山田 太郎', createdDate: '2026/10/05 12:00:00' }
-];
-const STUB_NAMES = {
-    TOROKU: { 1000001: '山田 太郎', 1000002: '佐藤 花子' },
-    SHIBU: { '001': '東支部', '002': '西支部' },
-    SODANIN: { 9000001: '山田 一郎' }
-};
-const findStubJigyo = (key) =>
-    STUB_JIGYO_LIST.find(
-        (j) => j.key.jujiJigyoNo === key.jujiJigyoNo && j.key.jujiBasyoNo === key.jujiBasyoNo && j.key.jisiNendo === key.jisiNendo
-    );
-const search = async ({ conditionJson }) => {
-    const jigyo = findStubJigyo(JSON.parse(conditionJson));
-    return jigyo ? STUB_ROWS.filter((r) => r.jigyoNo === jigyo.key.jujiJigyoNo).map(({ jigyoNo, ...row }) => row) : [];
-};
-const getJigyo = async (key) => {
-    const jigyo = findStubJigyo(key);
-    const basyo = STUB_JIGYO_LIST.find((j) => j.key.jujiBasyoNo === key.jujiBasyoNo);
-    return {
-        basyoName: basyo ? basyo.basyoName : '',
-        jigyo: jigyo ? { jigyoName: jigyo.jigyoName, shibuCode: jigyo.shibuCode, shibuName: jigyo.shibuName } : null
-    };
-};
-const getName = async ({ nameType, code }) => (STUB_NAMES[nameType] || {})[code] || null;
-// ========== スタブ ここまで ==========
-
 export default class JujOubojouhoukensakuModel extends LightningElement {
-    // 呼出し元（JUJ080）からの引継ぎ
+    // JUJ080 からの引継ぎ
     @api jigyoKey; // { jujiJigyoNo, jujiBasyoNo, jisiNendo }
-    @api jigyo; // 呼出し元で取得済みの事業 { jigyoName, shibuCode, shibuName }
-    @api basyoName; // 呼出し元で取得済みの従事場所名
-    @api keyReadonly = false; // true：従事事業基本情報から遷移（従事事業キーは入力不可）
+    @api jigyo; // 取得済みの事業 { jigyoName, shibuCode, shibuName }
+    @api basyoName;
+    @api keyReadonly = false; // true＝従事事業基本情報から遷移（従事事業キーは入力不可）
 
     // 従事事業キー部（画面の値）
     key = emptyKey();
@@ -183,7 +138,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
     sortBy;
     sortDirection;
 
-    headerMessages = []; // 画面頭部に表示するエラーメッセージ
+    headerMessages = []; // 画面頭部のエラーメッセージ
     isLoading = false;
 
     // 共通の検索子画面
@@ -191,11 +146,11 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
     subScreenField = null; // 戻り値を設定する検索条件の項目（例：torokuNoFrom）
     subScreenLevel = SUB_SCREEN_LEVEL;
 
-    // 項目ラベル取得用のオブジェクト情報
+    // 項目ラベルの取得
     objectApiNames = [OBO_OBJECT, JIGYO_OBJECT, BASYO_OBJECT, MEMBER_OBJECT, SODANIN_OBJECT, OFFICE_OBJECT];
     objectInfos;
-    // 検索結果の列（初期は既定ラベル。オブジェクト情報の取得後に列名を設定し直す）
-    // ※ 再描画のたびに列定義を作り直すと、列幅・折り返し等の設定がリセットされるため、取得時のみ設定する
+    // 検索結果の列（項目ラベルの取得後に列名を設定し直す）
+    // ※ 再描画のたびに作り直すと列幅・折り返しの設定がリセットされるため、取得時のみ設定する
     columns = buildColumns(this.labels);
 
     @wire(getObjectInfos, { objectApiNames: '$objectApiNames' })
@@ -204,19 +159,43 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         this.columns = buildColumns(this.labels);
     }
 
-    // ========== No.35 画面初期化 ==========
+    // ========== 画面初期化 ==========
     connectedCallback() {
+        this.lockPageScroll();
         this.initKey();
+    }
+
+    disconnectedCallback() {
+        this.unlockPageScroll();
+    }
+
+    // 表示中は背面の画面（JUJ080）がマウスホイールでスクロールしないよう、ページのスクロールを止める
+    // （閉じたとき＝本コンポーネントが削除されたときに元に戻す）
+    // ※ ページの要素を操作できない環境（Lightning Locker 等）では何もしない（画面の処理は続ける）
+    lockPageScroll() {
+        try {
+            this.pageOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+        } catch (e) {
+            // スクロールを止められない場合はそのまま表示する
+        }
+    }
+
+    unlockPageScroll() {
+        try {
+            document.body.style.overflow = this.pageOverflow || '';
+        } catch (e) {
+            // 同上
+        }
     }
 
     // 従事事業キー部を初期表示の状態にする（初期表示・クリアで使用）
     initKey() {
-        // 呼出し元の従事事業キー・取得済みの事業情報を表示する
         this.key = { ...emptyKey(), ...(this.jigyoKey || {}) };
         this.prevKey = { ...this.key };
         this.currentJigyo = { ...(this.jigyo || {}) };
         this.currentBasyoName = this.basyoName || '';
-        // 従事事業メニューから遷移し、実施年度が空白の場合は、汎用マスタの対象年度を設定して No.36 と同じ処理を行う
+        // 従事事業メニューから遷移し、実施年度が空白の場合は汎用マスタの対象年度を設定して事業を取得する
         if (!this.keyReadonly && !this.key.jisiNendo) {
             this.setDefaultNendo();
         }
@@ -224,7 +203,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
 
     async setDefaultNendo() {
         try {
-            const nendo = await getHanyouMasterTaisyoNendo(); // 取得できない場合（''）は設定しない
+            const nendo = await getHanyouMasterTaisyoNendo();
             if (nendo) {
                 this.key = { ...this.key, jisiNendo: nendo };
                 await this.onKeyChanged();
@@ -234,11 +213,11 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         }
     }
 
-    // ========== No.36 従事事業No.／従事場所No.／実施年度のフォーカスアウト ==========
+    // ========== 従事事業キーのフォーカスアウト ==========
     handleKeyBlur(event) {
-        const field = event.target.dataset.field; // jujiJigyoNo / jujiBasyoNo / jisiNendo
+        const field = event.target.dataset.field;
         this.key = { ...this.key, [field]: event.target.value };
-        // 実施年度の形式エラー（No.28）は次の検索ボタン押下まで表示しない
+        // 実施年度の形式エラーは次の検索ボタン押下まで表示しない
         if (field === 'jisiNendo') {
             this.clearNendoError();
         }
@@ -247,22 +226,21 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
 
     async onKeyChanged() {
         await this.loadJigyo();
-        // 従事事業キーの3項目のいずれかが変わった場合、検索結果を消去する
+        // キーが変わった場合は検索結果を消去する
         if (!this.isSameKey(this.key, this.prevKey)) {
             this.searchData = [];
         }
         this.prevKey = { ...this.key };
     }
 
-    // 従事場所名・従事事業の取得（JUJ080 No.2・No.18 と同じ。最終受付番号・入力制御は行わない）
+    // 従事場所名・従事事業の取得（JUJ080 と同じ。最終受付番号・入力制御は扱わない）
     async loadJigyo() {
         const { jujiJigyoNo, jujiBasyoNo, jisiNendo } = this.key;
-        // 従事場所No が変わっていない場合、従事場所名は再設定しない（表示のちらつき防止）
+        // 表示のちらつき防止のため、変わっていない場合は取得結果が返るまで現在の表示を保持する
         const isBasyoChanged = jujiBasyoNo !== this.prevKey.jujiBasyoNo;
         if (isBasyoChanged) {
             this.currentBasyoName = '';
         }
-        // 従事事業キーが変わっていない場合は、取得結果が返るまで現在の表示を保持する（表示のちらつき防止）
         if (!this.isSameKey(this.key, this.prevKey)) {
             this.currentJigyo = {};
         }
@@ -270,7 +248,6 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
             return;
         }
         try {
-            // 戻り値：{ basyoName, jigyo: { jigyoName, shibuCode, shibuName } | null }
             const result = await getJigyo({ ...this.key });
             if (isBasyoChanged) {
                 this.currentBasyoName = result.basyoName || '';
@@ -287,10 +264,10 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         this.condition = { ...this.condition, [field]: event.detail.value };
     }
 
-    // ========== No.39 登録番号／支部コード／相談員番号（From・To）のフォーカスアウト ==========
+    // ========== 登録番号／支部コード／相談員番号のフォーカスアウト ==========
     // 横に名称を表示する（未入力・取得できない場合は空白）
     async handleNoBlur(event) {
-        const field = event.target.dataset.field; // 例：torokuNoFrom
+        const field = event.target.dataset.field;
         const code = event.target.value;
         const nameType = NAME_TYPES[field.replace(/(From|To)$/, '')];
         try {
@@ -301,10 +278,10 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         }
     }
 
-    // ========== No.42 検索ボタン押下：5.データ更新 (7) ==========
+    // ========== 検索 ==========
     async handleSearchAction() {
         this.headerMessages = [];
-        // 4.入力チェック No.24〜28（すべてチェックしてから表示する）
+        // すべてチェックしてからまとめて表示する
         const isRangeValid = this.validateRanges();
         const isNendoValid = this.validateNendoFormat();
         if (!isRangeValid || !isNendoValid) {
@@ -312,7 +289,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         }
         this.isLoading = true;
         try {
-            // 応募の検索（従事事業キーが未入力、または従事事業が存在しない場合はサーバ側で 0件を返す）
+            // 従事事業キーが未入力、または従事事業が存在しない場合は 0件
             const result = await search({ conditionJson: JSON.stringify(this.buildCondition()) });
             // 従事事業No.・従事事業名・従事場所No.・従事場所名・実施年度は画面の値を設定する
             this.searchData = result.map((row) => ({
@@ -332,7 +309,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         }
     }
 
-    // No.24〜27 相関（区間）チェック：From ＞ To の場合はエラー（画面頭部にまとめて表示）
+    // 相関（区間）チェック：From ＞ To の場合はエラー（頭部）
     validateRanges() {
         const c = this.condition;
         const labels = this.labels;
@@ -348,8 +325,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         return errors.length === 0;
     }
 
-    // No.28 実施年度：入力可（従事事業メニューから遷移）で、半角数字4桁（西暦）以外の場合はエラー（項目の下に表示）
-    // ※ 未入力はエラーとしない（検索結果0件）
+    // 実施年度：入力可の場合のみ、半角数字4桁以外はエラー（項目の下）。未入力はエラーとしない（0件）
     validateNendoFormat() {
         const nendo = this.key.jisiNendo;
         const isValid = this.keyReadonly || !nendo || NENDO_PATTERN.test(nendo);
@@ -390,7 +366,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         };
     }
 
-    // ========== No.43 検索結果の並べ替え（画面内で並べ替え、再検索は行わない。空白は末尾） ==========
+    // ========== 検索結果の並べ替え（画面内。再検索は行わない） ==========
     handleSort(event) {
         const { fieldName, sortDirection } = event.detail;
         const sign = sortDirection === 'asc' ? 1 : -1;
@@ -408,7 +384,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         this.sortDirection = sortDirection;
     }
 
-    // ========== No.44 選択ボタン（検索結果の行）：選択した応募の応募IDを JUJ080 に返す ==========
+    // ========== 選択（応募IDを JUJ080 に返す） ==========
     handleRowAction(event) {
         if (event.detail.action.name === 'select_row') {
             const applicationId = event.detail.row.applicationId;
@@ -416,18 +392,16 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         }
     }
 
-    // ========== No.37・38・40・41 検索ボタン（共通子画面 JUJ110・JUJ120・JUJ130・JUJ150） ==========
-    // 【要確認】JUJ110・120・130・140・150（共通担当）の組込み方。接続までは仮表示とする
-    // 検索条件の初期値は渡さない。フォーカスアウトと同じ契機のため、メッセージは消去しない
+    // ========== 共通の検索子画面（JUJ110・120・130・140・150） ==========
+    // 【要確認】共通担当の子画面の組込み方
+    // フォーカスアウトと同じ扱いのため、メッセージは消去しない
     handleSubSearchClick(event) {
         this.subScreenId = event.target.dataset.screen;
         this.subScreenField = event.target.dataset.field || null;
     }
 
-    // 子画面からの戻り
-    // ・従事事業キー（JUJ110・JUJ120）：キーを設定し、フォーカスアウトと同じく事業を取得する
-    //   （JUJ110 の戻り値に支部コードがなく、JUJ120 は場所のみのため、戻り値の名称は使用しない）
-    // ・検索条件（JUJ130・JUJ140・JUJ150）：番号と戻り値の名称を設定する（サーバへの名称取得は行わない）
+    // JUJ110・120：キーを設定して事業を取得する（戻り値の名称は使用しない）
+    // JUJ130・140・150：番号と戻り値の名称を設定する
     handleSubScreenSelect(event) {
         const rec = event.detail.selectedRecord;
         const screenId = this.subScreenId;
@@ -442,8 +416,8 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         } else if (screenId === SUB_SHIBU) {
             this.setConditionNo(field, rec.shibuCode, rec.shibuName);
         } else if (screenId === SUB_JUJISHA) {
-            // ※ 登録番号の検索ボタンは html でコメントアウト中（2026/10/20）。復活させる場合に使用する
-            // 登録番号の検索条件のため、相談員（登録番号なし）が選択された場合は設定しない
+            // ※ 登録番号の検索ボタンは現在なし（html でコメントアウト）
+            // 相談員（登録番号なし）が選択された場合は設定しない
             if (rec.torokuNo) {
                 this.setConditionNo(field, rec.torokuNo, rec.name);
             }
@@ -467,10 +441,8 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         this.names = { ...this.names, [field]: toText(name) };
     }
 
-    // ========== No.45 クリアボタン押下 ==========
-    // 画面を開いた時の状態に戻す
-    // ※ 従事事業キー部は呼出し元から引き継いだ値に戻す（従事事業基本情報から遷移した場合は入力不可のため変わらない。
-    //   従事事業メニューから遷移した場合は入力した値を破棄し、実施年度が空白なら汎用マスタの対象年度を設定する）
+    // ========== クリア ==========
+    // 画面を開いた時の状態に戻す（従事事業キー部は JUJ080 から引き継いだ値に戻す）
     handleClearSearch() {
         this.initKey();
         this.condition = emptyCondition();
@@ -482,7 +454,9 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         this.clearNendoError();
     }
 
-    // ========== No.46 閉じるボタン押下：JUJ080 に返さずに画面を閉じる ==========
+    pageOverflow = ''; // 表示前のページのスクロール設定（閉じたときに戻す）
+
+    // ========== 閉じる（JUJ080 に返さない） ==========
     closeSearchModal() {
         this.dispatchEvent(new CustomEvent('close'));
     }
@@ -496,7 +470,6 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         return a.jujiJigyoNo === b.jujiJigyoNo && a.jujiBasyoNo === b.jujiBasyoNo && a.jisiNendo === b.jisiNendo;
     }
 
-    // 項目ラベル取得：指定オブジェクトの項目情報（未取得時は空オブジェクト）
     getFieldInfos(objectApiName) {
         const results = this.objectInfos?.data?.results || [];
         const info = results.find((r) => r.result && r.result.apiName === objectApiName);
@@ -504,13 +477,9 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
     }
 
     // ========== Getter ==========
-    // 3.表示ラベル No.71・76・79 従事事業キー：従事事業基本情報から遷移した場合は入力不可、検索ボタン非表示
+    // 従事事業基本情報から遷移した場合は従事事業キーが入力不可、検索ボタンが非活性
     get isInputDisabled() {
         return this.keyReadonly;
-    }
-
-    get isSearchButtonVisible() {
-        return !this.keyReadonly;
     }
 
     get hasHeaderMessages() {
@@ -538,8 +507,7 @@ export default class JujOubojouhoukensakuModel extends LightningElement {
         return this.subScreenId === SUB_SODANIN;
     }
 
-    // ========== Getter（3.表示ラベル） ==========
-    // 画面項目のラベル（メタデータから取得。取得できない場合は既定ラベル）
+    // 画面項目のラベル（項目ラベル。取得できない場合は既定ラベル）
     get labels() {
         const labels = {};
         Object.entries(LABEL_FIELDS).forEach(([key, [objectApiName, field, defaultLabel]]) => {

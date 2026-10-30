@@ -1,5 +1,5 @@
 <template>
-    <!-- モーダル全体（中サイズを指定） -->
+    <!-- モーダル -->
     <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_medium">
         <div class="slds-modal__container">
             <!-- モーダルヘッダー -->
@@ -16,12 +16,12 @@
             </header>
 
             <!-- モーダルボディ -->
-            <div class="slds-modal__content slds-p-around_medium">
+            <div class="slds-modal__content slds-p-around_medium" style="overscroll-behavior: contain">
                 <template if:true={isLoading}>
                     <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
                 </template>
 
-                <!-- エラーメッセージ（複数項目の関連チェック・業務チェック・サーバエラー） -->
+                <!-- エラーメッセージ -->
                 <template if:true={hasHeaderMessages}>
                     <div class="slds-text-color_error slds-m-bottom_medium slds-p-left_medium">
                         <ul class="slds-list_dotted">
@@ -58,15 +58,15 @@
                                             disabled={isInputDisabled}
                                         ></lightning-input>
                                     </div>
-                                    <template if:true={isSearchButtonVisible}>
-                                        <div class="slds-col slds-grow-none">
-                                            <lightning-button
-                                                label="検索"
-                                                data-screen="JUJ110"
-                                                onclick={handleSubSearchClick}
-                                            ></lightning-button>
-                                        </div>
-                                    </template>
+                                    <!-- 従事事業基本情報から遷移した場合は非活性 -->
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ110"
+                                            onclick={handleSubSearchClick}
+                                            disabled={isInputDisabled}
+                                        ></lightning-button>
+                                    </div>
                                     <div class="slds-col">
                                         <div
                                             style="
@@ -137,15 +137,15 @@
                                             disabled={isInputDisabled}
                                         ></lightning-input>
                                     </div>
-                                    <template if:true={isSearchButtonVisible}>
-                                        <div class="slds-col slds-grow-none">
-                                            <lightning-button
-                                                label="検索"
-                                                data-screen="JUJ120"
-                                                onclick={handleSubSearchClick}
-                                            ></lightning-button>
-                                        </div>
-                                    </template>
+                                    <!-- 従事事業基本情報から遷移した場合は非活性 -->
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label="検索"
+                                            data-screen="JUJ120"
+                                            onclick={handleSubSearchClick}
+                                            disabled={isInputDisabled}
+                                        ></lightning-button>
+                                    </div>
                                     <div class="slds-col">
                                         <div
                                             style="
@@ -230,7 +230,7 @@
                                             onblur={handleNoBlur}
                                         ></lightning-input>
                                     </div>
-                                    <!-- 登録番号の検索ボタンは、対応する共通子画面がないためコメントアウト（2026/10/20）
+                                    <!-- 登録番号の検索ボタンは、対応する共通子画面がないため使用しない
                                     <div class="slds-col slds-grow-none">
                                         <lightning-button
                                             label="検索"
@@ -273,7 +273,7 @@
                                             onblur={handleNoBlur}
                                         ></lightning-input>
                                     </div>
-                                    <!-- 登録番号の検索ボタンは、対応する共通子画面がないためコメントアウト（2026/10/20）
+                                    <!-- 登録番号の検索ボタンは、対応する共通子画面がないため使用しない
                                     <div class="slds-col slds-grow-none">
                                         <lightning-button
                                             label="検索"
@@ -301,7 +301,7 @@
                             </div>
                         </div>
 
-                        <!-- 7行目: 支部コード（検索用） -->
+                        <!-- 7行目: 支部コード（検索条件） -->
                         <div class="slds-form-element">
                             <label class="slds-form-element__label">{labels.shibuCode}</label>
                             <div class="slds-form-element__control slds-grid slds-vertical-align-center">
@@ -559,7 +559,7 @@
     <!-- モーダルの背景 -->
     <div class="slds-backdrop slds-backdrop_open"></div>
 
-    <!-- 共通の検索子画面（検索条件の初期値は渡さない） -->
+    <!-- 共通の検索子画面 -->
     <template if:true={isJigyoSearchOpen}>
         <c-juj_-jigyo-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-jigyo-kensaku>
     </template>
@@ -569,7 +569,7 @@
     <template if:true={isShibuSearchOpen}>
         <c-juj_-shibu-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-shibu-kensaku>
     </template>
-    <!-- 登録番号の検索ボタンをコメントアウトしたため未使用（2026/10/20）
+    <!-- 登録番号の検索ボタンがないため未使用
     <template if:true={isJujishaSearchOpen}>
         <c-juj_-taishosha-kensaku z-index-level={subScreenLevel} onselect={handleSubScreenSelect} onclose={handleSubScreenClose}></c-juj_-taishosha-kensaku>
     </template>

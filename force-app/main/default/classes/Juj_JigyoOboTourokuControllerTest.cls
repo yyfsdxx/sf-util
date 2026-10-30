@@ -1,7 +1,6 @@
 /**
  * Juj_JigyoOboTourokuController のテストクラス
- * ※ テストデータの必須項目が不足する場合は setup に追加すること。
- * ※ コントローラの戻り値は Map<String, Object>（JSON 経由）のため、ヘルパーで値を取り出して検証する。
+ * ※ コントローラの戻り値は Map のため、ヘルパーで値を取り出して検証する。
  */
 @IsTest
 private class Juj_JigyoOboTourokuControllerTest {
@@ -15,12 +14,13 @@ private class Juj_JigyoOboTourokuControllerTest {
 
     @TestSetup
     static void setup() {
-        // 従事事業が参照する事務所・法人（支部）。支部コード・支部名は Jims_Sibu_Code__c・Jims_Sibu_Name__c（Name は使用しない）
         Account shibu = new Account(Name = 'テスト事務局', Jims_Sibu_Code__c = '001', Jims_Sibu_Name__c = 'テスト支部');
         insert shibu;
         Juji_Basyo_Master__c basyo = new Juji_Basyo_Master__c(
             JujM_Juji_Basyo_No__c = BASYO_NO,
-            JujM_Juji_Basyo_Name__c = 'テスト場所'
+            JujM_Juji_Basyo_Name__c = 'テスト場所',
+            // 従事事業の入力規則：従事事業の事務所・法人と同じ支部コード
+            JujM_Sibu_Code__c = '001'
         );
         insert basyo;
         insert new Juji_Jigyo__c(
@@ -28,13 +28,19 @@ private class Juj_JigyoOboTourokuControllerTest {
             Juji_Juji_Basyo_Master__c = basyo.Id,
             Juji_Jisi_Nendo__c = NENDO,
             Juji_Juji_Jigyo_Name__c = 'テスト事業',
+            // 従事事業の入力規則を満たす値
+            Juji_Syakin_Siharai_Hoho__c = '謝金無',
+            Juji_Kotuhi_Siharai_Hoho__c = '交通費無',
+            Juji_Internet_Bosyu_Kubun__c = '募集する',
+            Juji_Internet_Bosyu_Kikan_From__c = Date.today().addDays(-30),
+            Juji_Internet_Bosyu_Kikan_To__c = Date.today().addDays(60),
+            Juji_Internet_Bosyu_Taisyo__c = '限定無し',
             Juji_Jimusyo_Hojin__c = shibu.Id
         );
         // 会員が参照する事務所・法人（従事事業とは別の支部）
         Account office = new Account(Name = 'テスト税理士事務所', Jims_Sibu_Code__c = '002', Jims_Sibu_Name__c = '西支部');
         insert office;
-        // 会員（Contact）。Name はロケールにより姓名の順序が変わるため、姓のみに氏名全体を設定する
-        // 事務所住所・電話番号・FAX番号は会員の項目から取得する
+        // Name はロケールにより姓名の順序が変わるため、姓のみに氏名全体を設定する
         insert new Contact(
             Kaii_Toroku_No__c = MEMBER_NO,
             LastName = 'テスト 太郎',
@@ -150,25 +156,28 @@ private class Juj_JigyoOboTourokuControllerTest {
     }
 
     // ==================== parseTimeSlots ====================
+    // 未設定・形式不正は空
     @IsTest
-    static void parseTimeSlots_未設定・形式不正は空() {
+    static void parseTimeSlots_blankOrInvalid_empty() {
         Assert.areEqual(0, Juj_JigyoOboTourokuController.parseTimeSlots(null).size());
         Assert.areEqual(0, Juj_JigyoOboTourokuController.parseTimeSlots('not json').size());
         Assert.areEqual(1, Juj_JigyoOboTourokuController.parseTimeSlots('[{"startTime":"13:00","endTime":"15:00"}]').size());
     }
 
     // ==================== joinName ====================
+    // 姓名の連結
     @IsTest
-    static void joinName_姓名の連結() {
+    static void joinName_joinsSeiMei() {
         Assert.areEqual('テスト タロウ', Juj_JigyoOboTourokuController.joinName('テスト', 'タロウ'));
         Assert.areEqual('テスト', Juj_JigyoOboTourokuController.joinName('テスト', null));
         Assert.areEqual('タロウ', Juj_JigyoOboTourokuController.joinName('', 'タロウ'));
         Assert.areEqual('', Juj_JigyoOboTourokuController.joinName(null, null));
     }
 
-    // ==================== getJigyo（画面アクション No.2・No.18） ====================
+    // ==================== getJigyo ====================
+    // 取得できる
     @IsTest
-    static void getJigyo_取得できる() {
+    static void getJigyo_found() {
         createMemberApplication(5);
         Map<String, Object> r = Juj_JigyoOboTourokuController.getJigyo(JIGYO_NO, BASYO_NO, NENDO);
         Assert.areEqual('テスト場所', get(r, 'basyoName'));
@@ -187,8 +196,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(true, get(r, 'jigyo.inputControl.optionalSodanKamoku'));
     }
 
+    // 入力フラグによる入力制御
     @IsTest
-    static void getJigyo_入力フラグによる入力制御() {
+    static void getJigyo_inputControlByFlags() {
         Juji_Jigyo__c j = jigyo();
         j.Juji_Ouboji_Hisu_Nyuryoku_Flag_Kano_Yobi__c = Juj_JigyoOboTourokuController.REQUIRED_ON;
         j.Juji_Ouboji_Hisu_Nyuryoku_Flag_Kano_Hi__c = '省略可';
@@ -211,28 +221,32 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(false, get(r, 'jigyo.inputControl.optionalSodanKamoku'));
     }
 
+    // 応募なしは最終受付番号が空白
     @IsTest
-    static void getJigyo_応募なしは最終受付番号が空白() {
+    static void getJigyo_noApplications_lastUketukeNoBlank() {
         Map<String, Object> r = Juj_JigyoOboTourokuController.getJigyo(JIGYO_NO, BASYO_NO, NENDO);
         Assert.isNull(get(r, 'jigyo.lastUketukeNo'));
     }
 
+    // 従事場所Noのみ
     @IsTest
-    static void getJigyo_従事場所Noのみ() {
+    static void getJigyo_basyoNoOnly() {
         Map<String, Object> r = Juj_JigyoOboTourokuController.getJigyo(null, BASYO_NO, null);
         Assert.areEqual('テスト場所', get(r, 'basyoName'));
         Assert.isNull(get(r, 'jigyo'));
     }
 
+    // 事業なし
     @IsTest
-    static void getJigyo_事業なし() {
+    static void getJigyo_jigyoNotFound() {
         Map<String, Object> r = Juj_JigyoOboTourokuController.getJigyo(WRONG_JIGYO_NO, BASYO_NO, NENDO);
         Assert.isNull(get(r, 'jigyo'));
     }
 
-    // ==================== getJujisha（画面アクション No.19） ====================
+    // ==================== getJujisha ====================
+    // 会員
     @IsTest
-    static void getJujisha_会員() {
+    static void getJujisha_member() {
         Map<String, Object> j = Juj_JigyoOboTourokuController.getJujisha(MEMBER_NO);
         Assert.areEqual('MEMBER', get(j, 'jujishaType'));
         Assert.areEqual('テスト 太郎', get(j, 'name'));
@@ -245,8 +259,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.isFalse(j.containsKey('recordId'), '内部用の ID は画面に返さないこと');
     }
 
+    // 相談員
     @IsTest
-    static void getJujisha_相談員() {
+    static void getJujisha_sodanin() {
         Map<String, Object> j = Juj_JigyoOboTourokuController.getJujisha(SODANIN_NO);
         Assert.areEqual('SODANIN', get(j, 'jujishaType'));
         Assert.areEqual('相談 花子', get(j, 'name'));
@@ -254,22 +269,25 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.isNull(get(j, 'shibuName'));
     }
 
+    // 取得できない
     @IsTest
-    static void getJujisha_取得できない() {
+    static void getJujisha_notFound() {
         Assert.isNull(Juj_JigyoOboTourokuController.getJujisha('0000000'));
         Assert.isNull(Juj_JigyoOboTourokuController.getJujisha(''));
     }
 
-    // ==================== loadApplication（画面アクション No.7 応募情報表示：従事事業キー＋番号） ====================
+    // ==================== loadApplication：応募情報表示（従事事業キー＋番号） ====================
+    // 番号・応募なし
     @IsTest
-    static void loadApplication_番号_応募なし() {
+    static void loadApplication_byNo_noApplication() {
         Map<String, Object> r = Juj_JigyoOboTourokuController.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual('テスト 太郎', get(r, 'jujisha.name'));
         Assert.isNull(get(r, 'application'));
     }
 
+    // 番号・応募あり
     @IsTest
-    static void loadApplication_番号_応募あり() {
+    static void loadApplication_byNo_withApplication() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         Map<String, Object> r = Juj_JigyoOboTourokuController.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual(String.valueOf(app.Id), get(r, 'application.applicationId'));
@@ -282,8 +300,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual('15:00', slot.get('endTime'));
     }
 
+    // 番号・従事者なしはエラー
     @IsTest
-    static void loadApplication_番号_従事者なしはエラー() {
+    static void loadApplication_byNo_jujishaNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, '0000000');
             Assert.fail('例外が発生すること');
@@ -292,8 +311,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 番号・事業なしはエラー
     @IsTest
-    static void loadApplication_番号_事業なしはエラー() {
+    static void loadApplication_byNo_jigyoNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.loadApplication(null, WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
             Assert.fail('例外が発生すること');
@@ -302,9 +322,10 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
-    // ==================== loadApplication（画面アクション No.8 応募情報検索からの戻り：応募ID） ====================
+    // ==================== loadApplication：応募情報検索からの戻り（応募ID） ====================
+    // 応募ID・取得できる
     @IsTest
-    static void loadApplication_応募ID_取得できる() {
+    static void loadApplication_byId_found() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         Map<String, Object> r = Juj_JigyoOboTourokuController.loadApplication(app.Id, null, null, null, null);
         Assert.areEqual(JIGYO_NO, get(r, 'jigyoKey.jujiJigyoNo'));
@@ -315,8 +336,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.isNotNull(get(r, 'application.systemModstamp'));
     }
 
+    // 応募ID・削除済みはエラー
     @IsTest
-    static void loadApplication_応募ID_削除済みはエラー() {
+    static void loadApplication_byId_deleted_error() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         delete app;
         try {
@@ -327,9 +349,10 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
-    // ==================== checkJigyo（画面アクション No.11 従事可能日入力） ====================
+    // ==================== checkJigyo ====================
+    // 従事可能日入力・実施日なしはエラー
     @IsTest
-    static void checkJigyo_従事可能日入力_実施日なしはエラー() {
+    static void checkJigyo_kanoubi_noJisshibi_error() {
         try {
             Juj_JigyoOboTourokuController.checkJigyo(JIGYO_NO, BASYO_NO, NENDO, true);
             Assert.fail('例外が発生すること');
@@ -338,8 +361,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 従事可能日入力・実施日あり
     @IsTest
-    static void checkJigyo_従事可能日入力_実施日あり() {
+    static void checkJigyo_kanoubi_withJisshibi_ok() {
         insert new Juji_Jigyo_Meisai__c(
             Juji_Meisai_Juji_Jigyo__c = jigyo().Id,
             Juji_Meisai_Jisi_Nengapi__c = Date.newInstance(2026, 11, 1)
@@ -348,8 +372,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.isTrue(true, '例外が発生しないこと');
     }
 
+    // 従事可能日入力・事業なしはエラー
     @IsTest
-    static void checkJigyo_従事可能日入力_事業なしはエラー() {
+    static void checkJigyo_kanoubi_jigyoNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.checkJigyo(WRONG_JIGYO_NO, BASYO_NO, NENDO, true);
             Assert.fail('例外が発生すること');
@@ -358,9 +383,10 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
-    // ==================== saveApplication（画面アクション No.12） ====================
+    // ==================== saveApplication ====================
+    // 追加モード
     @IsTest
-    static void saveApplication_追加モード() {
+    static void saveApplication_addMode() {
         createMemberApplication(5);
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(SODANIN_NO);
         // 時間帯が1件も選択されていない日付は登録しない
@@ -386,8 +412,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(2, app.Oubo_Meisa_Juji_Jigyo_Oubo__r.size(), '時間帯のない日付は登録しないこと');
     }
 
+    // 全日程従事可能は全曜日可
     @IsTest
-    static void saveApplication_全日程従事可能は全曜日可() {
+    static void saveApplication_allDays_allWeekdaysKa() {
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
         req.form.allDays = true;
         req.form.weekdays = new List<String>();
@@ -399,8 +426,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual('有', get(r, 'application.form.keiken'));
     }
 
+    // 追加モードで登録済みはエラー
     @IsTest
-    static void saveApplication_追加モードで登録済みはエラー() {
+    static void saveApplication_addMode_alreadyExists_error() {
         createMemberApplication(1);
         try {
             save(addRequest(MEMBER_NO));
@@ -410,8 +438,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 変更モードで受付番号0は採番
     @IsTest
-    static void saveApplication_変更モードで受付番号0は採番() {
+    static void saveApplication_changeMode_uketukeNoZero_numbered() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(0);
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
@@ -432,8 +461,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual('[{"startTime":"10:00","endTime":"11:00"}]', details[0].Oubo_Meisa_JisshiJikantai_Meisai__c);
     }
 
+    // 変更モードで採番済みは採番しない
     @IsTest
-    static void saveApplication_変更モードで採番済みは採番しない() {
+    static void saveApplication_changeMode_numbered_notRenumbered() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(5);
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
@@ -444,8 +474,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(5, [SELECT Oubo_Uketuke_No__c FROM Juji_Jigyo_Oubo__c WHERE Id = :app.Id].Oubo_Uketuke_No__c);
     }
 
+    // 変更モードで削除済みはエラー
     @IsTest
-    static void saveApplication_変更モードで削除済みはエラー() {
+    static void saveApplication_changeMode_deleted_error() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
@@ -459,8 +490,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 変更モードで更新済みはエラー
     @IsTest
-    static void saveApplication_変更モードで更新済みはエラー() {
+    static void saveApplication_changeMode_updatedByOther_error() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
         req.applicationId = app.Id;
@@ -474,14 +506,16 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 登録・正常
     @IsTest
-    static void checkJigyo_登録_正常() {
+    static void checkJigyo_save_ok() {
         Juj_JigyoOboTourokuController.checkJigyo(JIGYO_NO, BASYO_NO, NENDO, false);
         Assert.isTrue(true, '例外が発生しないこと');
     }
 
+    // 登録・事業なしはエラー
     @IsTest
-    static void checkJigyo_登録_事業なしはエラー() {
+    static void checkJigyo_save_jigyoNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.checkJigyo(WRONG_JIGYO_NO, BASYO_NO, NENDO, false);
             Assert.fail('例外が発生すること');
@@ -490,8 +524,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 事業なしはエラー
     @IsTest
-    static void saveApplication_事業なしはエラー() {
+    static void saveApplication_jigyoNotFound_error() {
         Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
         req.jigyoKey.jujiJigyoNo = WRONG_JIGYO_NO;
         try {
@@ -502,8 +537,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 従事者なしはエラー
     @IsTest
-    static void saveApplication_従事者なしはエラー() {
+    static void saveApplication_jujishaNotFound_error() {
         try {
             save(addRequest('0000000'));
             Assert.fail('例外が発生すること');
@@ -512,17 +548,19 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
-    // ==================== deleteApplication（画面アクション No.13） ====================
+    // ==================== deleteApplication ====================
+    // 削除できる
     @IsTest
-    static void deleteApplication_削除できる() {
+    static void deleteApplication_deletes() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         Juj_JigyoOboTourokuController.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, app.SystemModstamp);
         Assert.areEqual(0, [SELECT COUNT() FROM Juji_Jigyo_Oubo__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Juji_Jigyo_Oubo_Meisai__c], '明細も削除されること');
     }
 
+    // 割当ありはエラー
     @IsTest
-    static void deleteApplication_割当ありはエラー() {
+    static void deleteApplication_assigned_error() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         // 仮割当（割当フラグ＝1）
         insert new Juji_Jigyo_Wariate__c(
@@ -540,8 +578,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(1, [SELECT COUNT() FROM Juji_Jigyo_Oubo__c], '削除されないこと');
     }
 
+    // 更新済みはエラー
     @IsTest
-    static void deleteApplication_更新済みはエラー() {
+    static void deleteApplication_updatedByOther_error() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(1);
         try {
             Juj_JigyoOboTourokuController.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, app.SystemModstamp.addSeconds(-1));
@@ -553,8 +592,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(1, [SELECT COUNT() FROM Juji_Jigyo_Oubo__c], '削除されないこと');
     }
 
+    // 応募なしはエラー
     @IsTest
-    static void deleteApplication_応募なしはエラー() {
+    static void deleteApplication_applicationNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, null);
             Assert.fail('例外が発生すること');
@@ -563,8 +603,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 事業なしはエラー
     @IsTest
-    static void deleteApplication_事業なしはエラー() {
+    static void deleteApplication_jigyoNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.deleteApplication(WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO, null);
             Assert.fail('例外が発生すること');
@@ -573,8 +614,9 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
+    // 従事者なしはエラー
     @IsTest
-    static void deleteApplication_従事者なしはエラー() {
+    static void deleteApplication_jujishaNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.deleteApplication(JIGYO_NO, BASYO_NO, NENDO, '0000000', null);
             Assert.fail('例外が発生すること');
@@ -583,17 +625,19 @@ private class Juj_JigyoOboTourokuControllerTest {
         }
     }
 
-    // ==================== deleteAllApplications（画面アクション No.14） ====================
+    // ==================== deleteAllApplications ====================
+    // 全件削除できる
     @IsTest
-    static void deleteAllApplications_全件削除できる() {
+    static void deleteAllApplications_deletesAll() {
         createMemberApplication(1);
         save(addRequest(SODANIN_NO));
         Juj_JigyoOboTourokuController.deleteAllApplications(JIGYO_NO, BASYO_NO, NENDO);
         Assert.areEqual(0, [SELECT COUNT() FROM Juji_Jigyo_Oubo__c]);
     }
 
+    // 割当ありは1件も削除しない
     @IsTest
-    static void deleteAllApplications_割当ありは1件も削除しない() {
+    static void deleteAllApplications_assigned_deletesNone() {
         createMemberApplication(1);
         save(addRequest(SODANIN_NO));
         // 相談員に確定した割当（確定フラグ＝1）
@@ -612,14 +656,16 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(2, [SELECT COUNT() FROM Juji_Jigyo_Oubo__c], '1件も削除されないこと');
     }
 
+    // 応募なしはエラーとしない
     @IsTest
-    static void deleteAllApplications_応募なしはエラーとしない() {
+    static void deleteAllApplications_noApplications_noError() {
         Juj_JigyoOboTourokuController.deleteAllApplications(JIGYO_NO, BASYO_NO, NENDO);
         Assert.areEqual(0, [SELECT COUNT() FROM Juji_Jigyo_Oubo__c], '例外が発生しないこと（現行同様）');
     }
 
+    // 事業なしはエラー
     @IsTest
-    static void deleteAllApplications_事業なしはエラー() {
+    static void deleteAllApplications_jigyoNotFound_error() {
         try {
             Juj_JigyoOboTourokuController.deleteAllApplications(WRONG_JIGYO_NO, BASYO_NO, NENDO);
             Assert.fail('例外が発生すること');

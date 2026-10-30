@@ -1,6 +1,5 @@
 /**
  * Juj_OubojouhoukensakuModelController のテストクラス
- * ※ テストデータの必須項目が不足する場合は setup に追加すること。
  */
 @IsTest
 private class Juj_OubojouhoukensakuModelControllerTest {
@@ -11,14 +10,15 @@ private class Juj_OubojouhoukensakuModelControllerTest {
 
     @TestSetup
     static void setup() {
-        // 事務所・法人。支部コード・支部名は Jims_Sibu_Code__c・Jims_Sibu_Name__c（Name は使用しない）
         Account shibu1 = new Account(Name = 'テスト事務所A', Jims_Sibu_Code__c = '001', Jims_Sibu_Name__c = '東支部');
         Account shibu2 = new Account(Name = 'テスト事務所B', Jims_Sibu_Code__c = '002', Jims_Sibu_Name__c = '西支部');
         insert new List<Account>{ shibu1, shibu2 };
 
         Juji_Basyo_Master__c basyo = new Juji_Basyo_Master__c(
             JujM_Juji_Basyo_No__c = BASYO_NO,
-            JujM_Juji_Basyo_Name__c = 'テスト場所'
+            JujM_Juji_Basyo_Name__c = 'テスト場所',
+            // 従事事業の入力規則：従事事業の事務所・法人と同じ支部コード
+            JujM_Sibu_Code__c = '001'
         );
         insert basyo;
         Juji_Jigyo__c jigyo = new Juji_Jigyo__c(
@@ -26,11 +26,17 @@ private class Juj_OubojouhoukensakuModelControllerTest {
             Juji_Juji_Basyo_Master__c = basyo.Id,
             Juji_Jisi_Nendo__c = NENDO,
             Juji_Juji_Jigyo_Name__c = 'テスト事業',
+            // 従事事業の入力規則を満たす値
+            Juji_Syakin_Siharai_Hoho__c = '謝金無',
+            Juji_Kotuhi_Siharai_Hoho__c = '交通費無',
+            Juji_Internet_Bosyu_Kubun__c = '募集する',
+            Juji_Internet_Bosyu_Kikan_From__c = Date.today().addDays(-30),
+            Juji_Internet_Bosyu_Kikan_To__c = Date.today().addDays(60),
+            Juji_Internet_Bosyu_Taisyo__c = '限定無し',
             Juji_Jimusyo_Hojin__c = shibu1.Id
         );
         insert jigyo;
 
-        // 会員（Contact）。支部は参照先の事務所・法人
         Contact m1 = new Contact(Kaii_Toroku_No__c = '1000001', LastName = '山田 太郎', AccountId = shibu1.Id);
         Contact m2 = new Contact(Kaii_Toroku_No__c = '1000002', LastName = '佐藤 花子', AccountId = shibu2.Id);
         insert new List<Contact>{ m1, m2 };
@@ -68,9 +74,10 @@ private class Juj_OubojouhoukensakuModelControllerTest {
         return nos;
     }
 
-    // ==================== 検索対象判定（5.データ更新 (7)③） ====================
+    // ==================== 検索対象判定 ====================
+    // 条件なしは会員と相談員の両方を受付番号順
     @IsTest
-    static void search_条件なしは会員と相談員の両方を受付番号順() {
+    static void search_noCondition_bothSortedByUketukeNo() {
         List<Map<String, Object>> rows = search(cond());
         Assert.areEqual(new List<String>{ '1000002', '1000001', '9000001' }, jujishaNos(rows));
         Assert.areEqual('佐藤 花子', rows[0].get('name'));
@@ -81,8 +88,9 @@ private class Juj_OubojouhoukensakuModelControllerTest {
         Assert.isNotNull(rows[0].get('createdDate'));
     }
 
+    // 未採番は末尾
     @IsTest
-    static void search_未採番は末尾() {
+    static void search_unnumberedLast() {
         Soudanin_Master__c s2 = new Soudanin_Master__c(SouM_Sodanin_No__c = '9000002', SouM_Sodanin_Name__c = '鈴木 次郎');
         insert s2;
         // マイページからの応募（受付番号 0）
@@ -94,30 +102,34 @@ private class Juj_OubojouhoukensakuModelControllerTest {
         Assert.areEqual(new List<String>{ '1000002', '1000001', '9000001', '9000002' }, jujishaNos(search(cond())));
     }
 
+    // 会員側のみ入力は会員のみ
     @IsTest
-    static void search_会員側のみ入力は会員のみ() {
+    static void search_memberSideOnly_membersOnly() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.torokuNoFrom = '1000001';
         Assert.areEqual(new List<String>{ '1000002', '1000001' }, jujishaNos(search(c)));
     }
 
+    // 支部コードは会員のみ
     @IsTest
-    static void search_支部コードは会員のみ() {
+    static void search_shibuCode_membersOnly() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.shibuCodeFrom = '002';
         c.shibuCodeTo = '002';
         Assert.areEqual(new List<String>{ '1000002' }, jujishaNos(search(c)));
     }
 
+    // 相談員側のみ入力は相談員のみ
     @IsTest
-    static void search_相談員側のみ入力は相談員のみ() {
+    static void search_sodaninSideOnly_sodaninsOnly() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.sodaninNoTo = '9999999';
         Assert.areEqual(new List<String>{ '9000001' }, jujishaNos(search(c)));
     }
 
+    // 両側入力はそれぞれの条件のOR
     @IsTest
-    static void search_両側入力はそれぞれの条件のOR() {
+    static void search_bothSides_or() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.torokuNoFrom = '1000002';
         c.sodaninNoFrom = '9000001';
@@ -125,43 +137,49 @@ private class Juj_OubojouhoukensakuModelControllerTest {
     }
 
     // ==================== 受付番号・氏名 ====================
+    // 受付番号範囲
     @IsTest
-    static void search_受付番号範囲() {
+    static void search_uketukeNoRange() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.uketukeNoFrom = 2;
         c.uketukeNoTo = 3;
         Assert.areEqual(new List<String>{ '1000001', '9000001' }, jujishaNos(search(c)));
     }
 
+    // 氏名部分一致は相談員側
     @IsTest
-    static void search_氏名部分一致は相談員側() {
+    static void search_namePartialMatch_sodanin() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.name = '一郎';
         Assert.areEqual(new List<String>{ '9000001' }, jujishaNos(search(c)));
     }
 
+    // 氏名部分一致は会員側
     @IsTest
-    static void search_氏名部分一致は会員側() {
+    static void search_namePartialMatch_member() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.name = '太郎';
         Assert.areEqual(new List<String>{ '1000001' }, jujishaNos(search(c)));
     }
 
+    // 氏名部分一致は会員・相談員の両方
     @IsTest
-    static void search_氏名部分一致は会員・相談員の両方() {
+    static void search_namePartialMatch_both() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.name = '山田';
         Assert.areEqual(new List<String>{ '1000001', '9000001' }, jujishaNos(search(c)));
     }
 
+    // 特殊文字
     @IsTest
-    static void escapeLike_特殊文字() {
+    static void escapeLike_specialChars() {
         Assert.areEqual('a\\%b\\_c\\\\d', Juj_OubojouhoukensakuModelController.escapeLike('a%b_c\\d'));
     }
 
-    // ==================== 事業の取得（No.36）・名称の取得（No.39） ====================
+    // ==================== getJigyo・getName ====================
+    // 事業と場所名を取得
     @IsTest
-    static void getJigyo_事業と場所名を取得() {
+    static void getJigyo_jigyoAndBasyoName() {
         Map<String, Object> r = Juj_OubojouhoukensakuModelController.getJigyo(JIGYO_NO, BASYO_NO, NENDO);
         Assert.areEqual('テスト場所', r.get('basyoName'));
         Map<String, Object> jigyo = (Map<String, Object>) r.get('jigyo');
@@ -170,22 +188,25 @@ private class Juj_OubojouhoukensakuModelControllerTest {
         Assert.areEqual('東支部', jigyo.get('shibuName'), '支部名は Jims_Sibu_Name__c（Name ではない）');
     }
 
+    // キー不足は場所名のみ
     @IsTest
-    static void getJigyo_キー不足は場所名のみ() {
+    static void getJigyo_incompleteKey_basyoNameOnly() {
         Map<String, Object> r = Juj_OubojouhoukensakuModelController.getJigyo(null, BASYO_NO, NENDO);
         Assert.areEqual('テスト場所', r.get('basyoName'));
         Assert.isNull(r.get('jigyo'));
     }
 
+    // 各種名称
     @IsTest
-    static void getName_各種名称() {
+    static void getName_eachType() {
         Assert.areEqual('山田 太郎', Juj_OubojouhoukensakuModelController.getName(Juj_OubojouhoukensakuModelController.NAME_TOROKU, '1000001'));
         Assert.areEqual('西支部', Juj_OubojouhoukensakuModelController.getName(Juj_OubojouhoukensakuModelController.NAME_SHIBU, '002'));
         Assert.areEqual('山田 一郎', Juj_OubojouhoukensakuModelController.getName(Juj_OubojouhoukensakuModelController.NAME_SODANIN, '9000001'));
     }
 
+    // 未入力・該当なしはnull
     @IsTest
-    static void getName_未入力・該当なしはnull() {
+    static void getName_blankOrNotFound_null() {
         Assert.isNull(Juj_OubojouhoukensakuModelController.getName(Juj_OubojouhoukensakuModelController.NAME_TOROKU, ''));
         Assert.isNull(Juj_OubojouhoukensakuModelController.getName(Juj_OubojouhoukensakuModelController.NAME_TOROKU, '9999999'));
         Assert.isNull(Juj_OubojouhoukensakuModelController.getName(Juj_OubojouhoukensakuModelController.NAME_SHIBU, '999'));
@@ -194,22 +215,25 @@ private class Juj_OubojouhoukensakuModelControllerTest {
     }
 
     // ==================== 0件・エラー ====================
+    // 事業なしは0件
     @IsTest
-    static void search_事業なしは0件() {
+    static void search_jigyoNotFound_zeroRows() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.jujiJigyoNo = '9999999';
         Assert.areEqual(0, search(c).size());
     }
 
+    // 事業キー未入力は0件
     @IsTest
-    static void search_事業キー未入力は0件() {
+    static void search_incompleteKey_zeroRows() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.jisiNendo = null;
         Assert.areEqual(0, search(c).size());
     }
 
+    // 受付番号の範囲逆転はエラー
     @IsTest
-    static void search_受付番号の範囲逆転はエラー() {
+    static void search_uketukeNoRangeReversed_error() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.uketukeNoFrom = 3;
         c.uketukeNoTo = 1;
@@ -221,8 +245,9 @@ private class Juj_OubojouhoukensakuModelControllerTest {
         }
     }
 
+    // 文字列の範囲逆転はエラー
     @IsTest
-    static void search_文字列の範囲逆転はエラー() {
+    static void search_textRangeReversed_error() {
         Juj_OubojouhoukensakuModelController.SearchCondition c = cond();
         c.torokuNoFrom = '2000000';
         c.torokuNoTo = '1000000';

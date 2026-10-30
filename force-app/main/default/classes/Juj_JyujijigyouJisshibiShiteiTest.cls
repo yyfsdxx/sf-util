@@ -1,6 +1,5 @@
 /**
  * Juj_JyujijigyouJisshibiShiteiController のテストクラス
- * ※ テストデータの必須項目が不足する場合は setup に追加すること。
  */
 @IsTest
 private class Juj_JyujijigyouJisshibiShiteiTest {
@@ -14,12 +13,13 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
 
     @TestSetup
     static void setup() {
-        // 従事事業が参照する事務所・法人（支部）。支部名は Jims_Sibu_Name__c（Name は使用しない）
         Account shibu = new Account(Name = 'テスト事務局', Jims_Sibu_Code__c = '001', Jims_Sibu_Name__c = 'テスト支部');
         insert shibu;
         Juji_Basyo_Master__c basyo = new Juji_Basyo_Master__c(
             JujM_Juji_Basyo_No__c = BASYO_NO,
-            JujM_Juji_Basyo_Name__c = 'テスト場所'
+            JujM_Juji_Basyo_Name__c = 'テスト場所',
+            // 従事事業の入力規則：従事事業の事務所・法人と同じ支部コード
+            JujM_Sibu_Code__c = '001'
         );
         insert basyo;
         Juji_Jigyo__c jigyo = new Juji_Jigyo__c(
@@ -27,10 +27,17 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
             Juji_Juji_Basyo_Master__c = basyo.Id,
             Juji_Jisi_Nendo__c = NENDO,
             Juji_Juji_Jigyo_Name__c = 'テスト事業',
+            // 従事事業の入力規則を満たす値
+            Juji_Syakin_Siharai_Hoho__c = '謝金無',
+            Juji_Kotuhi_Siharai_Hoho__c = '交通費無',
+            Juji_Internet_Bosyu_Kubun__c = '募集する',
+            Juji_Internet_Bosyu_Kikan_From__c = Date.today().addDays(-30),
+            Juji_Internet_Bosyu_Kikan_To__c = Date.today().addDays(60),
+            Juji_Internet_Bosyu_Taisyo__c = '限定無し',
             Juji_Jimusyo_Hojin__c = shibu.Id
         );
         insert jigyo;
-        // 実施日：11/3（時間帯2件。順序は逆に登録し、使用しない項目も含める）、11/10（時間帯1件）、12/1
+        // 実施日：11/3（時間帯2件。逆順に登録し、使用しない項目も含める）、11/10（時間帯1件）、12/1
         insert new List<Juji_Jigyo_Meisai__c>{
             new Juji_Jigyo_Meisai__c(
                 Juji_Meisai_Juji_Jigyo__c = jigyo.Id,
@@ -60,7 +67,7 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         Soudanin_Master__c sodanin = new Soudanin_Master__c(SouM_Sodanin_No__c = SODANIN_NO, SouM_Sodanin_Name__c = '相談 花子');
         insert sodanin;
 
-        // 割当：会員は 11/10 に仮割当（本人割当済）、相談員は 11/3 の 09:00-12:00 に確定
+        // 割当：会員は 11/10 に仮割当（本人割当済）、相談員は 11/3 の 09:00-12:00・13:00-15:00 に確定
         insert new List<Juji_Jigyo_Wariate__c>{
             new Juji_Jigyo_Wariate__c(
                 Wari_Juji_Jigyo__c = jigyo.Id,
@@ -74,7 +81,7 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
                 Wari_Soudanin_Master__c = sodanin.Id,
                 Wari_Juji_Nengapi__c = Date.newInstance(2026, 11, 3),
                 Wari_Kakutei_Flag__c = Juj_JyujijigyouJisshibiShiteiController.FLAG_ON,
-                Wari_JisshiJikantai_Meisai__c = '[{"startTime":"09:00","endTime":"12:00","unused":"x"}]'
+                Wari_JisshiJikantai_Meisai__c = '[{"startTime":"09:00","endTime":"12:00","unused":"x"},{"startTime":"13:00","endTime":"15:00"}]'
             )
         };
     }
@@ -96,9 +103,10 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         Assert.areEqual(expected[1], e.getMessage());
     }
 
-    // ==================== init（画面アクション No.21） ====================
+    // ==================== init ====================
+    // 会員
     @IsTest
-    static void init_会員() {
+    static void init_member() {
         Map<String, Object> r = Juj_JyujijigyouJisshibiShiteiController.init(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual('テスト事業', get(r, 'jigyo.jigyoName'));
         Assert.areEqual('001', get(r, 'jigyo.shibuCode'));
@@ -117,23 +125,26 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         Assert.areEqual('11:00', slot.get('endTime'));
     }
 
+    // 相談員
     @IsTest
-    static void init_相談員() {
+    static void init_sodanin() {
         Map<String, Object> r = Juj_JyujijigyouJisshibiShiteiController.init(JIGYO_NO, BASYO_NO, NENDO, SODANIN_NO);
         Assert.areEqual('相談 花子', get(r, 'jujishaName'));
         Assert.areEqual('2026-11-03', get((Map<String, Object>) ((List<Object>) get(r, 'ownAssigned'))[0], 'kanoubiDate'));
     }
 
+    // 実施日なしは範囲null
     @IsTest
-    static void init_実施日なしは範囲null() {
+    static void init_noJisshibi_rangeNull() {
         delete [SELECT Id FROM Juji_Jigyo_Meisai__c];
         Map<String, Object> r = Juj_JyujijigyouJisshibiShiteiController.init(JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.isNull(get(r, 'minJisshibi'));
         Assert.isNull(get(r, 'maxJisshibi'));
     }
 
+    // 事業なしはエラー
     @IsTest
-    static void init_事業なしはエラー() {
+    static void init_jigyoNotFound_error() {
         try {
             Juj_JyujijigyouJisshibiShiteiController.init(WRONG_JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
             Assert.fail('例外が発生すること');
@@ -142,8 +153,9 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         }
     }
 
+    // 従事者なしはエラー
     @IsTest
-    static void init_従事者なしはエラー() {
+    static void init_jujishaNotFound_error() {
         try {
             Juj_JyujijigyouJisshibiShiteiController.init(JIGYO_NO, BASYO_NO, NENDO, '9999999');
             Assert.fail('例外が発生すること');
@@ -152,8 +164,9 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         }
     }
 
+    // 番号未入力はエラー
     @IsTest
-    static void init_番号未入力はエラー() {
+    static void init_blankNo_error() {
         try {
             Juj_JyujijigyouJisshibiShiteiController.init(JIGYO_NO, BASYO_NO, NENDO, '');
             Assert.fail('例外が発生すること');
@@ -162,9 +175,10 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         }
     }
 
-    // ==================== getDays（画面アクション No.34） ====================
+    // ==================== getDays ====================
+    // 表示期間内の実施日と時間帯
     @IsTest
-    static void getDays_表示期間内の実施日と時間帯() {
+    static void getDays_daysAndSlotsInPeriod() {
         List<Map<String, Object>> days = Juj_JyujijigyouJisshibiShiteiController.getDays(JIGYO_NO, BASYO_NO, NENDO, '2026-11-01', '2026-11-30');
         Assert.areEqual(2, days.size(), '12/1 は表示期間外');
 
@@ -174,7 +188,7 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         Assert.areEqual('09:00', day.get('startTime'), '開始時間（時間型）は HH:mm で返すこと');
         Assert.areEqual('15:00', day.get('endTime'));
         Assert.areEqual('午前・午後', day.get('biko'));
-        Assert.areEqual(1, day.get('wariateNinzu'), '確定した割当の件数');
+        Assert.areEqual(2, day.get('wariateNinzu'), '日付行は各時間帯の割当人数の合計（1人で2時間帯＝2）');
 
         List<Object> slots = (List<Object>) day.get('timeSlots');
         Assert.areEqual(2, slots.size());
@@ -185,12 +199,13 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         Assert.areEqual(1, first.get('wariateNinzu'), 'その時間帯を含む確定割当の件数');
         Map<String, Object> second = (Map<String, Object>) slots[1];
         Assert.areEqual('13:00', second.get('startTime'));
-        Assert.areEqual(0, second.get('wariateNinzu'));
+        Assert.areEqual(1, second.get('wariateNinzu'));
         Assert.areEqual(0, days[1].get('wariateNinzu'), '仮割当は割当人数に含めない');
     }
 
+    // 事業なしはエラー
     @IsTest
-    static void getDays_事業なしはエラー() {
+    static void getDays_jigyoNotFound_error() {
         try {
             Juj_JyujijigyouJisshibiShiteiController.getDays(WRONG_JIGYO_NO, BASYO_NO, NENDO, '2026-11-01', '2026-11-30');
             Assert.fail('例外が発生すること');
@@ -199,15 +214,17 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         }
     }
 
-    // ==================== checkSave（画面アクション No.30） ====================
+    // ==================== checkSave ====================
+    // 正常
     @IsTest
-    static void checkSave_正常() {
+    static void checkSave_ok() {
         Juj_JyujijigyouJisshibiShiteiController.checkSave(JIGYO_NO, BASYO_NO, NENDO);
         Assert.isTrue(true, '例外が発生しないこと');
     }
 
+    // 事業なしはエラー
     @IsTest
-    static void checkSave_事業なしはエラー() {
+    static void checkSave_jigyoNotFound_error() {
         try {
             Juj_JyujijigyouJisshibiShiteiController.checkSave(WRONG_JIGYO_NO, BASYO_NO, NENDO);
             Assert.fail('例外が発生すること');
@@ -217,21 +234,24 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
     }
 
     // ==================== 変換 ====================
+    // 未設定・形式不正は空
     @IsTest
-    static void parseSlots_未設定・形式不正は空() {
+    static void parseSlots_blankOrInvalid_empty() {
         Assert.areEqual(0, Juj_JyujijigyouJisshibiShiteiController.parseSlots(null).size());
         Assert.areEqual(0, Juj_JyujijigyouJisshibiShiteiController.parseSlots('not json').size());
     }
 
+    // 時間型とテキスト
     @IsTest
-    static void toTimeText_時間型とテキスト() {
+    static void toTimeText_timeAndText() {
         Assert.isNull(Juj_JyujijigyouJisshibiShiteiController.toTimeText(null));
         Assert.areEqual('09:30', Juj_JyujijigyouJisshibiShiteiController.toTimeText(Time.newInstance(9, 30, 0, 0)));
         Assert.areEqual('13:00', Juj_JyujijigyouJisshibiShiteiController.toTimeText('13:00'));
     }
 
+    // 開始と終了
     @IsTest
-    static void slotKey_開始と終了() {
+    static void slotKey_startAndEnd() {
         Assert.areEqual('09:00-12:00', Juj_JyujijigyouJisshibiShiteiController.slotKey('09:00', '12:00'));
     }
 }
