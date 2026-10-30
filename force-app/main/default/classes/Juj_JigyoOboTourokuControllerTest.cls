@@ -113,6 +113,36 @@ private class Juj_JigyoOboTourokuControllerTest {
         return req;
     }
 
+    // 変更モードの登録リクエスト。システム更新日時・応募明細の版は、画面と同じく応募の読込結果から設定する
+    private static Juj_JigyoOboTourokuController.SaveRequest changeRequest(Juji_Jigyo_Oubo__c app) {
+        Map<String, Object> loaded = Juj_JigyoOboTourokuController.loadApplication(app.Id, null, null, null, null);
+        Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
+        req.applicationId = app.Id;
+        req.systemModstamp = app.SystemModstamp;
+        req.meisaiVersion = (String) get(loaded, 'application.meisaiVersion');
+        return req;
+    }
+
+    // 応募の明細（従事可能日・開始時間の昇順）
+    private static List<Juji_Jigyo_Oubo_Meisai__c> details(Id appId) {
+        return [
+            SELECT Id, Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisai_Kaisi_Jikoku__c, Oubo_Meisai_Syuryo_Jikoku__c
+            FROM Juji_Jigyo_Oubo_Meisai__c
+            WHERE Oubo_Meisa_Juji_Jigyo_Oubo__c = :appId
+            ORDER BY Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisai_Kaisi_Jikoku__c
+        ];
+    }
+
+    private static Juji_Jigyo_Oubo_Meisai__c newDetail(Id appId, Date kanoubiDate, Integer startHour, Integer endHour) {
+        return new Juji_Jigyo_Oubo_Meisai__c(
+            Oubo_Meisa_Juji_Jigyo_Oubo__c = appId,
+            Oubo_Meisa_Juji_Jigyo__c = jigyo().Id,
+            Oubo_Meisa_Juji_Kano_Nengapi__c = kanoubiDate,
+            Oubo_Meisai_Kaisi_Jikoku__c = Time.newInstance(startHour, 0, 0, 0),
+            Oubo_Meisai_Syuryo_Jikoku__c = Time.newInstance(endHour, 0, 0, 0)
+        );
+    }
+
     // 従事可能日（時間帯1件）
     private static Juj_JigyoOboTourokuController.KanoubiDate kanoubi(String kanoubiDate, String startTime, String endTime) {
         Juj_JigyoOboTourokuController.TimeSlot slot = new Juj_JigyoOboTourokuController.TimeSlot();
@@ -137,7 +167,7 @@ private class Juj_JigyoOboTourokuControllerTest {
         return [SELECT Id FROM Contact WHERE Kaii_Toroku_No__c = :MEMBER_NO LIMIT 1];
     }
 
-    // 会員の応募を作成する（明細1件付き）
+    // 会員の応募を作成する（明細2件付き：11/01 の 13:00-15:00・09:00-12:00。順序は逆に登録する）
     private static Juji_Jigyo_Oubo__c createMemberApplication(Decimal uketukeNo) {
         Id jigyoId = jigyo().Id;
         Juji_Jigyo_Oubo__c app = new Juji_Jigyo_Oubo__c(
@@ -146,22 +176,33 @@ private class Juj_JigyoOboTourokuControllerTest {
             Oubo_Uketuke_No__c = uketukeNo
         );
         insert app;
-        insert new Juji_Jigyo_Oubo_Meisai__c(
-            Oubo_Meisa_Juji_Jigyo_Oubo__c = app.Id,
-            Oubo_Meisa_Juji_Jigyo__c = jigyoId,
-            Oubo_Meisa_Juji_Kano_Nengapi__c = Date.newInstance(2026, 11, 1),
-            Oubo_Meisa_JisshiJikantai_Meisai__c = '[{"startTime":"13:00","endTime":"15:00","unused":"x"}]' // 使用しない項目は無視される
-        );
+        insert new List<Juji_Jigyo_Oubo_Meisai__c>{
+            new Juji_Jigyo_Oubo_Meisai__c(
+                Oubo_Meisa_Juji_Jigyo_Oubo__c = app.Id,
+                Oubo_Meisa_Juji_Jigyo__c = jigyoId,
+                Oubo_Meisa_Juji_Kano_Nengapi__c = Date.newInstance(2026, 11, 1),
+                Oubo_Meisai_Kaisi_Jikoku__c = Time.newInstance(13, 0, 0, 0),
+                Oubo_Meisai_Syuryo_Jikoku__c = Time.newInstance(15, 0, 0, 0)
+            ),
+            new Juji_Jigyo_Oubo_Meisai__c(
+                Oubo_Meisa_Juji_Jigyo_Oubo__c = app.Id,
+                Oubo_Meisa_Juji_Jigyo__c = jigyoId,
+                Oubo_Meisa_Juji_Kano_Nengapi__c = Date.newInstance(2026, 11, 1),
+                Oubo_Meisai_Kaisi_Jikoku__c = Time.newInstance(9, 0, 0, 0),
+                Oubo_Meisai_Syuryo_Jikoku__c = Time.newInstance(12, 0, 0, 0)
+            )
+        };
         return [SELECT Id, SystemModstamp, Oubo_Uketuke_No__c FROM Juji_Jigyo_Oubo__c WHERE Id = :app.Id];
     }
 
-    // ==================== parseTimeSlots ====================
-    // 未設定・形式不正は空
+    // ==================== toTime・toTimeText ====================
+    // 時間の変換
     @IsTest
-    static void parseTimeSlots_blankOrInvalid_empty() {
-        Assert.areEqual(0, Juj_JigyoOboTourokuController.parseTimeSlots(null).size());
-        Assert.areEqual(0, Juj_JigyoOboTourokuController.parseTimeSlots('not json').size());
-        Assert.areEqual(1, Juj_JigyoOboTourokuController.parseTimeSlots('[{"startTime":"13:00","endTime":"15:00"}]').size());
+    static void toTime_conversion() {
+        Assert.areEqual(Time.newInstance(9, 5, 0, 0), Juj_JigyoOboTourokuController.toTime('09:05'));
+        Assert.isNull(Juj_JigyoOboTourokuController.toTime(null));
+        Assert.areEqual('09:05', Juj_JigyoOboTourokuController.toTimeText(Time.newInstance(9, 5, 0, 0)));
+        Assert.isNull(Juj_JigyoOboTourokuController.toTimeText(null));
     }
 
     // ==================== joinName ====================
@@ -294,10 +335,13 @@ private class Juj_JigyoOboTourokuControllerTest {
         List<Object> kanoubiDates = (List<Object>) get(r, 'application.kanoubiDates');
         Assert.areEqual(1, kanoubiDates.size());
         Map<String, Object> k = (Map<String, Object>) kanoubiDates[0];
-        Assert.areEqual('2026-11-01', k.get('kanoubiDate'));
-        Map<String, Object> slot = (Map<String, Object>) ((List<Object>) k.get('timeSlots'))[0];
-        Assert.areEqual('13:00', slot.get('startTime'));
-        Assert.areEqual('15:00', slot.get('endTime'));
+        Assert.areEqual('2026-11-01', k.get('kanoubiDate'), '同じ日の明細は1日にまとめること');
+        List<Object> slots = (List<Object>) k.get('timeSlots');
+        Assert.areEqual(2, slots.size());
+        Map<String, Object> slot = (Map<String, Object>) slots[0];
+        Assert.areEqual('09:00', slot.get('startTime'), '開始時間の昇順');
+        Assert.areEqual('12:00', slot.get('endTime'));
+        Assert.areEqual('13:00', ((Map<String, Object>) slots[1]).get('startTime'));
     }
 
     // 番号・従事者なしはエラー
@@ -442,9 +486,7 @@ private class Juj_JigyoOboTourokuControllerTest {
     @IsTest
     static void saveApplication_changeMode_uketukeNoZero_numbered() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(0);
-        Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
-        req.applicationId = app.Id;
-        req.systemModstamp = app.SystemModstamp;
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
         req.kanoubiDates = new List<Juj_JigyoOboTourokuController.KanoubiDate>{ kanoubi('2026-11-15', '10:00', '11:00') };
 
         Map<String, Object> r = save(req);
@@ -452,22 +494,39 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual('テスト 太郎', [SELECT Oubo_Shimei__c FROM Juji_Jigyo_Oubo__c WHERE Id = :app.Id].Oubo_Shimei__c);
 
         List<Juji_Jigyo_Oubo_Meisai__c> details = [
-            SELECT Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisa_JisshiJikantai_Meisai__c
+            SELECT Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisai_Kaisi_Jikoku__c, Oubo_Meisai_Syuryo_Jikoku__c
             FROM Juji_Jigyo_Oubo_Meisai__c
             WHERE Oubo_Meisa_Juji_Jigyo_Oubo__c = :app.Id
         ];
-        Assert.areEqual(1, details.size(), '明細が置き換えられること');
+        Assert.areEqual(1, details.size(), '外した時間帯は削除され、選択した時間帯のみになること');
         Assert.areEqual(Date.newInstance(2026, 11, 15), details[0].Oubo_Meisa_Juji_Kano_Nengapi__c);
-        Assert.areEqual('[{"startTime":"10:00","endTime":"11:00"}]', details[0].Oubo_Meisa_JisshiJikantai_Meisai__c);
+        Assert.areEqual(Time.newInstance(10, 0, 0, 0), details[0].Oubo_Meisai_Kaisi_Jikoku__c);
+        Assert.areEqual(Time.newInstance(11, 0, 0, 0), details[0].Oubo_Meisai_Syuryo_Jikoku__c);
+    }
+
+    // 1日に複数の時間帯は時間帯ごとに1件
+    @IsTest
+    static void saveApplication_multipleSlotsInDay_oneRecordPerSlot() {
+        Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
+        Juj_JigyoOboTourokuController.KanoubiDate k = kanoubi('2026-11-22', '09:00', '12:00');
+        Juj_JigyoOboTourokuController.TimeSlot pm = new Juj_JigyoOboTourokuController.TimeSlot();
+        pm.startTime = '13:00';
+        pm.endTime = '15:00';
+        k.timeSlots.add(pm);
+        req.kanoubiDates = new List<Juj_JigyoOboTourokuController.KanoubiDate>{ k };
+        save(req);
+        Assert.areEqual(
+            2,
+            [SELECT COUNT() FROM Juji_Jigyo_Oubo_Meisai__c WHERE Oubo_Meisa_Juji_Kano_Nengapi__c = :Date.newInstance(2026, 11, 22)],
+            '1日に2つの時間帯を選択した場合は2件登録されること'
+        );
     }
 
     // 変更モードで採番済みは採番しない
     @IsTest
     static void saveApplication_changeMode_numbered_notRenumbered() {
         Juji_Jigyo_Oubo__c app = createMemberApplication(5);
-        Juj_JigyoOboTourokuController.SaveRequest req = addRequest(MEMBER_NO);
-        req.applicationId = app.Id;
-        req.systemModstamp = app.SystemModstamp;
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
 
         Map<String, Object> r = save(req);
         Assert.isNull(get(r, 'uketukeNo'));
@@ -504,6 +563,99 @@ private class Juj_JigyoOboTourokuControllerTest {
             // 共通の排他チェックによるエラー（メッセージは共通側で定義）
             Assert.isNotNull(e);
         }
+    }
+
+    // 変更モード：変わらない時間帯はそのまま残し、外した時間帯は削除、新たに選択した時間帯は登録する
+    @IsTest
+    static void saveApplication_changeMode_detailsDiff() {
+        Juji_Jigyo_Oubo__c app = createMemberApplication(1);
+        Id keptId = details(app.Id)[1].Id; // 11/01 13:00-15:00
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
+        req.kanoubiDates = new List<Juj_JigyoOboTourokuController.KanoubiDate>{
+            kanoubi('2026-11-01', '13:00', '15:00'),
+            kanoubi('2026-11-15', '10:00', '11:00')
+        };
+        save(req);
+
+        List<Juji_Jigyo_Oubo_Meisai__c> after = details(app.Id);
+        Assert.areEqual(2, after.size());
+        Assert.areEqual(keptId, after[0].Id, '変わらない時間帯は同じレコードのまま残ること');
+        Assert.areEqual(Date.newInstance(2026, 11, 15), after[1].Oubo_Meisa_Juji_Kano_Nengapi__c, '新たに選択した時間帯が登録されること');
+        Assert.areEqual(Time.newInstance(10, 0, 0, 0), after[1].Oubo_Meisai_Kaisi_Jikoku__c);
+    }
+
+    // 変更モード：従事可能日を変えない場合、明細は変更されない
+    @IsTest
+    static void saveApplication_changeMode_detailsUnchanged() {
+        Juji_Jigyo_Oubo__c app = createMemberApplication(1);
+        Set<Id> beforeIds = new Map<Id, Juji_Jigyo_Oubo_Meisai__c>(details(app.Id)).keySet();
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
+        req.kanoubiDates = new List<Juj_JigyoOboTourokuController.KanoubiDate>{
+            kanoubi('2026-11-01', '09:00', '12:00'),
+            kanoubi('2026-11-01', '13:00', '15:00')
+        };
+        save(req);
+        Assert.areEqual(beforeIds, new Map<Id, Juji_Jigyo_Oubo_Meisai__c>(details(app.Id)).keySet());
+    }
+
+    // 変更モード：同じ時間帯が重複して登録されている場合は1件のみ残す。画面で重複している時間帯も1件のみ登録する
+    @IsTest
+    static void saveApplication_changeMode_duplicateDetails_keepOne() {
+        Juji_Jigyo_Oubo__c app = createMemberApplication(1);
+        insert newDetail(app.Id, Date.newInstance(2026, 11, 1), 13, 15);
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
+        req.kanoubiDates = new List<Juj_JigyoOboTourokuController.KanoubiDate>{
+            kanoubi('2026-11-01', '13:00', '15:00'),
+            kanoubi('2026-11-01', '13:00', '15:00'),
+            kanoubi('2026-11-20', '10:00', '11:00'),
+            kanoubi('2026-11-20', '10:00', '11:00')
+        };
+        save(req);
+        Assert.areEqual(2, details(app.Id).size(), '11/01 13:00-15:00 と 11/20 10:00-11:00 の1件ずつになること');
+    }
+
+    // 変更モード：読込後に他のユーザが明細を追加した場合はエラー
+    @IsTest
+    static void saveApplication_changeMode_detailAddedByOther_error() {
+        Juji_Jigyo_Oubo__c app = createMemberApplication(1);
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
+        insert newDetail(app.Id, Date.newInstance(2026, 11, 29), 9, 12);
+        assertDetailUpdatedError(req);
+    }
+
+    // 変更モード：読込後に他のユーザが明細を削除した場合はエラー
+    @IsTest
+    static void saveApplication_changeMode_detailDeletedByOther_error() {
+        Juji_Jigyo_Oubo__c app = createMemberApplication(1);
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
+        delete details(app.Id)[0];
+        assertDetailUpdatedError(req);
+    }
+
+    // 変更モード：読込後に他のユーザが明細を更新した場合（明細の最新のシステム更新日時が読込時より新しい）はエラー
+    @IsTest
+    static void saveApplication_changeMode_detailUpdatedByOther_error() {
+        Juji_Jigyo_Oubo__c app = createMemberApplication(1);
+        Juj_JigyoOboTourokuController.SaveRequest req = changeRequest(app);
+        // 同一秒内の更新ではシステム更新日時が変わらない場合があるため、読込時の版を1秒前にして他ユーザの更新を再現する
+        List<String> parts = req.meisaiVersion.split('_');
+        req.meisaiVersion = parts[0] + '_' + (Long.valueOf(parts[1]) - 1000);
+        assertDetailUpdatedError(req);
+    }
+
+    private static void assertDetailUpdatedError(Juj_JigyoOboTourokuController.SaveRequest req) {
+        try {
+            save(req);
+            Assert.fail('例外が発生すること');
+        } catch (AuraHandledException e) {
+            Assert.areEqual(Juj_JigyoOboTourokuController.E_DETAIL_UPDATED[1], e.getMessage());
+        }
+    }
+
+    // 明細の版：明細がない場合
+    @IsTest
+    static void meisaiVersion_noDetails() {
+        Assert.areEqual('0_0', Juj_JigyoOboTourokuController.meisaiVersion(new List<Juji_Jigyo_Oubo_Meisai__c>()));
     }
 
     // 登録・正常

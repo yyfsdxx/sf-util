@@ -1,7 +1,8 @@
 /**
  * JUJ081 従事可能日指定 コントローラ
  * ※ DB は更新しない。選択した従事可能日は JUJ080 へ返し、JUJ080 の登録時に登録する。
- * ※ 従事事業明細・従事事業割当の時間帯は実施時間帯明細（JSON）に保持する。時間帯は開始時間＋終了時間で照合する。
+ * ※ 従事事業明細は1件＝1実施日（時間帯は実施時間帯明細の JSON）、従事事業割当は1件＝1従事者の1日の1時間帯（開始時間・終了時間）。
+ *   時間帯は 'HH:mm' の開始時間＋終了時間で照合する。
  * ※ 参照範囲は共有設定に従う（SOQL はユーザモードで実行し、支部の条件は付けない）。
  */
 public with sharing class Juj_JyujijigyouJisshibiShiteiController {
@@ -203,23 +204,23 @@ public with sharing class Juj_JyujijigyouJisshibiShiteiController {
         Id memberId = jujisha.memberId;
         Id sodaninId = jujisha.sodaninId;
         List<Juji_Jigyo_Wariate__c> recs = [
-            SELECT Wari_Juji_Nengapi__c, Wari_JisshiJikantai_Meisai__c
+            SELECT Wari_Juji_Nengapi__c, Wari_Kaisi_Jikoku__c, Wari_Syuryo_Jikoku__c
             FROM Juji_Jigyo_Wariate__c
             WHERE Wari_Juji_Jigyo__c = :jigyoId
             AND Wari_Kaiin__c = :memberId
             AND Wari_Soudanin_Master__c = :sodaninId
             AND (Wari_Wriate_Flag__c = :FLAG_ON OR Wari_Kakutei_Flag__c = :FLAG_ON)
             WITH USER_MODE
-            ORDER BY Wari_Juji_Nengapi__c
+            ORDER BY Wari_Juji_Nengapi__c, Wari_Kaisi_Jikoku__c
         ];
         Map<Date, Set<String>> keysByDate = new Map<Date, Set<String>>();
         for (Juji_Jigyo_Wariate__c rec : recs) {
             if (!keysByDate.containsKey(rec.Wari_Juji_Nengapi__c)) {
                 keysByDate.put(rec.Wari_Juji_Nengapi__c, new Set<String>());
             }
-            for (SlotInfo slot : parseSlots(rec.Wari_JisshiJikantai_Meisai__c)) {
-                keysByDate.get(rec.Wari_Juji_Nengapi__c).add(slotKey(slot.startTime, slot.endTime));
-            }
+            keysByDate.get(rec.Wari_Juji_Nengapi__c).add(
+                slotKey(toTimeText(rec.Wari_Kaisi_Jikoku__c), toTimeText(rec.Wari_Syuryo_Jikoku__c))
+            );
         }
         List<KanoubiDate> result = new List<KanoubiDate>();
         for (Date d : keysByDate.keySet()) {
@@ -242,7 +243,7 @@ public with sharing class Juj_JyujijigyouJisshibiShiteiController {
     private static Map<Date, List<Assignment>> selectConfirmedAssignments(Id jigyoId, Date fromD, Date toD) {
         Map<Date, List<Assignment>> result = new Map<Date, List<Assignment>>();
         for (Juji_Jigyo_Wariate__c rec : [
-            SELECT Wari_Juji_Nengapi__c, Wari_JisshiJikantai_Meisai__c
+            SELECT Wari_Juji_Nengapi__c, Wari_Kaisi_Jikoku__c, Wari_Syuryo_Jikoku__c
             FROM Juji_Jigyo_Wariate__c
             WHERE Wari_Juji_Jigyo__c = :jigyoId
             AND Wari_Juji_Nengapi__c >= :fromD
@@ -251,9 +252,7 @@ public with sharing class Juj_JyujijigyouJisshibiShiteiController {
             WITH USER_MODE
         ]) {
             Assignment a = new Assignment();
-            for (SlotInfo slot : parseSlots(rec.Wari_JisshiJikantai_Meisai__c)) {
-                a.slotKeys.add(slotKey(slot.startTime, slot.endTime));
-            }
+            a.slotKeys.add(slotKey(toTimeText(rec.Wari_Kaisi_Jikoku__c), toTimeText(rec.Wari_Syuryo_Jikoku__c)));
             if (!result.containsKey(rec.Wari_Juji_Nengapi__c)) {
                 result.put(rec.Wari_Juji_Nengapi__c, new List<Assignment>());
             }

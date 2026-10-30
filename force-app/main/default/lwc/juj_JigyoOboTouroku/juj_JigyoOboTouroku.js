@@ -182,6 +182,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
     // 応募情報部
     applicationId = null; // null＝追加モード
     systemModstamp = null; // 排他チェック用
+    meisaiVersion = null; // 応募明細の排他チェック用
     form = emptyForm();
     kanoubiDates = []; // [{ kanoubiDate: 'yyyy-MM-dd', timeSlots: [{ startTime, endTime }] }]
 
@@ -581,6 +582,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
                     jujishaNo: this.jujishaNo,
                     applicationId: this.applicationId,
                     systemModstamp: this.systemModstamp,
+                    meisaiVersion: this.meisaiVersion,
                     form: this.form,
                     kanoubiDates: this.kanoubiDates
                 })
@@ -681,6 +683,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
     applyApplication(app) {
         this.applicationId = app.applicationId;
         this.systemModstamp = app.systemModstamp;
+        this.meisaiVersion = app.meisaiVersion;
         this.uketukeNo = app.uketukeNo;
         this.form = { ...emptyForm(), ...app.form };
         this.kanoubiDates = app.kanoubiDates || [];
@@ -804,6 +807,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
     toAddMode() {
         this.applicationId = null;
         this.systemModstamp = null;
+        this.meisaiVersion = null;
     }
 
     isSameJigyoKey(a, b) {

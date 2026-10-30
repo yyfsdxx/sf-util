@@ -1,6 +1,9 @@
 /**
  * JUJ080 従事事業応募登録 コントローラ
- * ※ 従事事業応募明細は1件＝1従事可能日（選択した時間帯は実施時間帯明細に JSON で保持する）。
+ * ※ 従事事業応募明細は1件＝1従事可能日の1時間帯（開始時間・終了時間）。
+ *   画面とは日付ごと（kanoubiDates: [{ kanoubiDate, timeSlots: [{ startTime, endTime }] }]）に受け渡し、本クラスで変換する。
+ *   変更モードの登録では、変更のあった時間帯のみ削除・登録する（変わらない時間帯はそのまま残す）。
+ * ※ 排他チェック：応募は共通部品、応募明細は件数＋最新のシステム更新日時（明細の版）で行う。
  * ※ 参照範囲は共有設定に従う（SOQL・DML はユーザモードで実行し、支部の条件は付けない）。
  * ※ 業務エラーは JujiOboException で発生させ、AuraHandledException に変換して画面へ返す。
  *   一括割当実行中・排他のチェックは共通部品（Juj_CommonController）が AuraHandledException を発生させる。
@@ -59,6 +62,12 @@ public with sharing class Juj_JigyoOboTourokuController {
     }; // No.18
     @TestVisible
     private static final List<String> E_UPDATE_NOT_FOUND = new List<String>{ 'JUJ080-E004', '更新するレコードが存在しません。' }; // No.19
+    // 【要確認】共通部品（checkOptimisticLock）の排他エラーと同じ文言にする
+    @TestVisible
+    private static final List<String> E_DETAIL_UPDATED = new List<String>{
+        'JUJ080-E006',
+        '他のユーザにより更新されています。再度表示してから操作してください。'
+    }; // No.20
     @TestVisible
     private static final List<String> E_APPLICATION_NOT_FOUND = new List<String>{ 'WLP007-0008', '指定された応募情報は登録されていません。' }; // No.21
     @TestVisible
@@ -215,6 +224,10 @@ public with sharing class Juj_JigyoOboTourokuController {
             if (jujisha == null) {
                 throw error(E_JUJISHA_NOT_FOUND);
             }
+            // 変更モードは応募をロックしてから取得する（応募明細の排他チェックから登録までの間に、明細が変更されないようにする）
+            if (!isAdd) {
+                lockApplication(jigyo.Id, jujisha);
+            }
             Juji_Jigyo_Oubo__c existing = selectApplicationByJujisha(jigyo.Id, jujisha);
             if (isAdd && existing != null) {
                 throw error(E_ALREADY_EXISTS);
@@ -224,6 +237,7 @@ public with sharing class Juj_JigyoOboTourokuController {
             }
             if (!isAdd) {
                 checkUpdated(existing.Id, request.systemModstamp);
+                checkDetailsUpdated(existing.Oubo_Meisa_Juji_Jigyo_Oubo__r, request.meisaiVersion);
             }
 
             // 受付番号の採番：追加モード、または登録済みの受付番号が 0・未設定（マイページからの応募）の場合、最大値＋1
@@ -256,30 +270,13 @@ public with sharing class Juj_JigyoOboTourokuController {
                 Database.update(rec, AccessLevel.USER_MODE);
             }
 
-            // 従事事業応募明細：変更モードは全件削除してから、従事可能日1日につき1件登録する
-            if (!isAdd && !existing.Oubo_Meisa_Juji_Jigyo_Oubo__r.isEmpty()) {
-                Database.delete(existing.Oubo_Meisa_Juji_Jigyo_Oubo__r, AccessLevel.USER_MODE);
-            }
-            List<Juji_Jigyo_Oubo_Meisai__c> details = new List<Juji_Jigyo_Oubo_Meisai__c>();
-            if (request.kanoubiDates != null) {
-                for (KanoubiDate kanoubi : request.kanoubiDates) {
-                    // 時間帯が選択されていない日付は登録しない
-                    if (kanoubi.timeSlots == null || kanoubi.timeSlots.isEmpty()) {
-                        continue;
-                    }
-                    details.add(
-                        new Juji_Jigyo_Oubo_Meisai__c(
-                            Oubo_Meisa_Juji_Jigyo_Oubo__c = rec.Id,
-                            Oubo_Meisa_Juji_Jigyo__c = jigyo.Id,
-                            Oubo_Meisa_Juji_Kano_Nengapi__c = Date.valueOf(kanoubi.kanoubiDate),
-                            Oubo_Meisa_JisshiJikantai_Meisai__c = JSON.serialize(kanoubi.timeSlots)
-                        )
-                    );
-                }
-            }
-            if (!details.isEmpty()) {
-                Database.insert(details, AccessLevel.USER_MODE);
-            }
+            // 従事事業応募明細：変更のあった時間帯のみ削除・登録する
+            saveDetails(
+                rec.Id,
+                jigyo.Id,
+                isAdd ? new List<Juji_Jigyo_Oubo_Meisai__c>() : existing.Oubo_Meisa_Juji_Jigyo_Oubo__r,
+                request.kanoubiDates
+            );
 
             // 採番した場合のみ返す（画面で最終受付番号に設定する）
             SaveResult result = new SaveResult();
@@ -287,6 +284,69 @@ public with sharing class Juj_JigyoOboTourokuController {
             return toMap(result);
         } catch (JujiOboException e) {
             throw toAuraException(e);
+        }
+    }
+
+    // 従事事業応募明細を画面の従事可能日に合わせる（5.データ更新 (3)④）
+    // 時間帯（従事可能日・開始時間・終了時間）で照合し、画面で外した時間帯は削除、新たに選択した時間帯は登録する。
+    // 変わらない時間帯はそのまま残す（同じ時間帯が重複して登録されている場合は1件のみ残す）
+    private static void saveDetails(
+        Id applicationId,
+        Id jigyoId,
+        List<Juji_Jigyo_Oubo_Meisai__c> currentList,
+        List<KanoubiDate> kanoubiDates
+    ) {
+        Map<String, Juji_Jigyo_Oubo_Meisai__c> current = new Map<String, Juji_Jigyo_Oubo_Meisai__c>();
+        List<Juji_Jigyo_Oubo_Meisai__c> deleteList = new List<Juji_Jigyo_Oubo_Meisai__c>();
+        for (Juji_Jigyo_Oubo_Meisai__c detail : currentList) {
+            String key = slotKey(detail.Oubo_Meisa_Juji_Kano_Nengapi__c, detail.Oubo_Meisai_Kaisi_Jikoku__c, detail.Oubo_Meisai_Syuryo_Jikoku__c);
+            if (current.containsKey(key)) {
+                deleteList.add(detail);
+            } else {
+                current.put(key, detail);
+            }
+        }
+
+        Set<String> selectedKeys = new Set<String>();
+        List<Juji_Jigyo_Oubo_Meisai__c> insertList = new List<Juji_Jigyo_Oubo_Meisai__c>();
+        if (kanoubiDates != null) {
+            for (KanoubiDate kanoubi : kanoubiDates) {
+                // 時間帯が選択されていない日付は登録しない
+                if (kanoubi.timeSlots == null) {
+                    continue;
+                }
+                Date kanoubiDate = Date.valueOf(kanoubi.kanoubiDate);
+                for (TimeSlot slot : kanoubi.timeSlots) {
+                    Time startTime = toTime(slot.startTime);
+                    Time endTime = toTime(slot.endTime);
+                    String key = slotKey(kanoubiDate, startTime, endTime);
+                    // 登録済みの時間帯、画面で重複している時間帯は登録しない
+                    if (!selectedKeys.add(key) || current.containsKey(key)) {
+                        continue;
+                    }
+                    insertList.add(
+                        new Juji_Jigyo_Oubo_Meisai__c(
+                            Oubo_Meisa_Juji_Jigyo_Oubo__c = applicationId,
+                            Oubo_Meisa_Juji_Jigyo__c = jigyoId,
+                            Oubo_Meisa_Juji_Kano_Nengapi__c = kanoubiDate,
+                            Oubo_Meisai_Kaisi_Jikoku__c = startTime,
+                            Oubo_Meisai_Syuryo_Jikoku__c = endTime
+                        )
+                    );
+                }
+            }
+        }
+        for (String key : current.keySet()) {
+            if (!selectedKeys.contains(key)) {
+                deleteList.add(current.get(key));
+            }
+        }
+
+        if (!deleteList.isEmpty()) {
+            Database.delete(deleteList, AccessLevel.USER_MODE);
+        }
+        if (!insertList.isEmpty()) {
+            Database.insert(insertList, AccessLevel.USER_MODE);
         }
     }
 
@@ -475,23 +535,38 @@ public with sharing class Juj_JigyoOboTourokuController {
     }
 
     private static Juji_Jigyo_Oubo__c selectApplicationByJujisha(Id jigyoId, JujishaInfo jujisha) {
-        // 応募は会員・相談員のどちらか一方のみ設定されるため、もう一方は null で検索する
-        Map<String, Object> binds = new Map<String, Object>{
-            'jigyoId' => jigyoId,
-            'memberId' => jujisha.jujishaType == TYPE_MEMBER ? jujisha.recordId : null,
-            'sodaninId' => jujisha.jujishaType == TYPE_SODANIN ? jujisha.recordId : null
-        };
         List<Juji_Jigyo_Oubo__c> recs = Database.queryWithBinds(
-            applicationSoql(
-                'Oubo_Juji_Jigyo__c = :jigyoId AND Oubo_Kaiin__c = :memberId AND Oubo_Soudanin_Master__c = :sodaninId'
-            ),
-            binds,
+            applicationSoql(JUJISHA_CONDITION),
+            jujishaBinds(jigyoId, jujisha),
             AccessLevel.USER_MODE
         );
         return recs.isEmpty() ? null : recs[0];
     }
 
-    // 従事事業応募と応募明細（従事可能日の昇順）を取得する SOQL
+    // 応募をロックする（応募明細を変更する処理も応募をロックするため、ロック中は他のユーザが明細を変更できない）
+    // ※ FOR UPDATE はサブクエリ・ORDER BY と併用できないため、応募の取得とは別に行う
+    private static void lockApplication(Id jigyoId, JujishaInfo jujisha) {
+        Database.queryWithBinds(
+            'SELECT Id FROM Juji_Jigyo_Oubo__c WHERE ' + JUJISHA_CONDITION + ' FOR UPDATE',
+            jujishaBinds(jigyoId, jujisha),
+            AccessLevel.USER_MODE
+        );
+    }
+
+    // 従事事業・従事者が一致する応募の条件
+    // 応募は会員・相談員のどちらか一方のみ設定されるため、もう一方は null で検索する
+    private static final String JUJISHA_CONDITION =
+        'Oubo_Juji_Jigyo__c = :jigyoId AND Oubo_Kaiin__c = :memberId AND Oubo_Soudanin_Master__c = :sodaninId';
+
+    private static Map<String, Object> jujishaBinds(Id jigyoId, JujishaInfo jujisha) {
+        return new Map<String, Object>{
+            'jigyoId' => jigyoId,
+            'memberId' => jujisha.jujishaType == TYPE_MEMBER ? jujisha.recordId : null,
+            'sodaninId' => jujisha.jujishaType == TYPE_SODANIN ? jujisha.recordId : null
+        };
+    }
+
+    // 従事事業応募と応募明細（従事可能日・開始時間の昇順）を取得する SOQL
     private static String applicationSoql(String whereClause) {
         List<String> fields = new List<String>{
             'Id',
@@ -518,8 +593,8 @@ public with sharing class Juj_JigyoOboTourokuController {
         fields.addAll(WEEKDAY_FIELDS.values());
         fields.addAll(SKILL_FIELDS);
         return 'SELECT ' + String.join(fields, ', ') +
-            ', (SELECT Id, Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisa_JisshiJikantai_Meisai__c' +
-            ' FROM Oubo_Meisa_Juji_Jigyo_Oubo__r ORDER BY Oubo_Meisa_Juji_Kano_Nengapi__c)' +
+            ', (SELECT Id, Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisai_Kaisi_Jikoku__c, Oubo_Meisai_Syuryo_Jikoku__c, SystemModstamp' +
+            ' FROM Oubo_Meisa_Juji_Jigyo_Oubo__r ORDER BY Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisai_Kaisi_Jikoku__c)' +
             ' FROM Juji_Jigyo_Oubo__c' +
             ' WHERE ' + whereClause +
             ' LIMIT 1';
@@ -556,17 +631,38 @@ public with sharing class Juj_JigyoOboTourokuController {
         return (Map<String, Object>) JSON.deserializeUntyped(JSON.serialize(dto));
     }
 
-    // 実施時間帯明細（JSON）→ 時間帯（未設定・形式不正の場合は空。使用しない項目は無視する）
+    // 'HH:mm' → 時間型
     @TestVisible
-    private static List<TimeSlot> parseTimeSlots(String value) {
+    private static Time toTime(String value) {
         if (String.isBlank(value)) {
-            return new List<TimeSlot>();
+            return null;
         }
-        try {
-            return (List<TimeSlot>) JSON.deserialize(value, List<TimeSlot>.class);
-        } catch (JSONException e) {
-            return new List<TimeSlot>();
+        List<String> parts = value.split(':');
+        return Time.newInstance(Integer.valueOf(parts[0]), Integer.valueOf(parts[1]), 0, 0);
+    }
+
+    // 時間型 → 'HH:mm'（タイムゾーンの影響を受けないよう時・分から組み立てる）
+    @TestVisible
+    private static String toTimeText(Time value) {
+        if (value == null) {
+            return null;
         }
+        return String.valueOf(value.hour()).leftPad(2, '0') + ':' + String.valueOf(value.minute()).leftPad(2, '0');
+    }
+
+    // 応募明細の照合キー（従事可能日＋開始時間＋終了時間。時間は時・分で比較する）
+    private static String slotKey(Date kanoubiDate, Time startTime, Time endTime) {
+        return String.valueOf(kanoubiDate) + ' ' + toTimeText(startTime) + '-' + toTimeText(endTime);
+    }
+
+    // 応募明細の版（件数＋システム更新日時の最大値）。読込後に他のユーザが明細を追加・削除・更新すると変わる
+    @TestVisible
+    private static String meisaiVersion(List<Juji_Jigyo_Oubo_Meisai__c> details) {
+        Long latest = 0;
+        for (Juji_Jigyo_Oubo_Meisai__c detail : details) {
+            latest = Math.max(latest, detail.SystemModstamp.getTime());
+        }
+        return details.size() + '_' + latest;
     }
 
     private static JigyoInfo toJigyoInfo(Juji_Jigyo__c jigyo) {
@@ -616,13 +712,25 @@ public with sharing class Juj_JigyoOboTourokuController {
         info.applicationId = app.Id;
         info.uketukeNo = app.Oubo_Uketuke_No__c;
         info.systemModstamp = app.SystemModstamp; // 排他チェック用
+        info.meisaiVersion = meisaiVersion(app.Oubo_Meisa_Juji_Jigyo_Oubo__r); // 応募明細の排他チェック用
         info.form = form;
+        // 応募明細（1件＝1時間帯）を従事可能日ごとにまとめる
         info.kanoubiDates = new List<KanoubiDate>();
+        Map<String, KanoubiDate> byDate = new Map<String, KanoubiDate>();
         for (Juji_Jigyo_Oubo_Meisai__c detail : app.Oubo_Meisa_Juji_Jigyo_Oubo__r) {
-            KanoubiDate kanoubi = new KanoubiDate();
-            kanoubi.kanoubiDate = String.valueOf(detail.Oubo_Meisa_Juji_Kano_Nengapi__c);
-            kanoubi.timeSlots = parseTimeSlots(detail.Oubo_Meisa_JisshiJikantai_Meisai__c);
-            info.kanoubiDates.add(kanoubi);
+            String dateText = String.valueOf(detail.Oubo_Meisa_Juji_Kano_Nengapi__c);
+            KanoubiDate kanoubi = byDate.get(dateText);
+            if (kanoubi == null) {
+                kanoubi = new KanoubiDate();
+                kanoubi.kanoubiDate = dateText;
+                kanoubi.timeSlots = new List<TimeSlot>();
+                byDate.put(dateText, kanoubi);
+                info.kanoubiDates.add(kanoubi);
+            }
+            TimeSlot slot = new TimeSlot();
+            slot.startTime = toTimeText(detail.Oubo_Meisai_Kaisi_Jikoku__c);
+            slot.endTime = toTimeText(detail.Oubo_Meisai_Syuryo_Jikoku__c);
+            kanoubi.timeSlots.add(slot);
         }
         return info;
     }
@@ -692,6 +800,14 @@ public with sharing class Juj_JigyoOboTourokuController {
     // ※ 削除済みは検出されないため、呼出し前に応募の存在を確認すること
     private static void checkUpdated(Id applicationId, Datetime systemModstamp) {
         Juj_CommonController.checkOptimisticLock(new Map<Id, Datetime>{ applicationId => systemModstamp }, OBO_OBJECT_NAME);
+    }
+
+    // 応募読込時から他のユーザにより応募明細が追加・削除・更新されている場合はエラー（4.入力チェック No.20）
+    // ※ 共通部品の排他チェックは明細の追加・削除を検出できないため、明細の版（件数＋最新のシステム更新日時）で判定する
+    private static void checkDetailsUpdated(List<Juji_Jigyo_Oubo_Meisai__c> details, String clientVersion) {
+        if (!meisaiVersion(details).equals(String.valueOf(clientVersion))) {
+            throw error(E_DETAIL_UPDATED);
+        }
     }
 
     // 応募の従事者に、同じ事業の割当（仮割当を含む）があるか
@@ -798,6 +914,7 @@ public with sharing class Juj_JigyoOboTourokuController {
         public Id applicationId;
         public Decimal uketukeNo;
         public Datetime systemModstamp;
+        public String meisaiVersion; // 応募明細の版（排他チェック用）
         public ApplicationForm form;
         public List<KanoubiDate> kanoubiDates;
     }
@@ -808,7 +925,6 @@ public with sharing class Juj_JigyoOboTourokuController {
         public List<TimeSlot> timeSlots;
     }
 
-    // 時間帯（開始時間＋終了時間で照合する）
     public class TimeSlot {
         public String startTime; // 'HH:mm'
         public String endTime; // 'HH:mm'
@@ -840,6 +956,7 @@ public with sharing class Juj_JigyoOboTourokuController {
         public String jujishaNo;
         public Id applicationId;
         public Datetime systemModstamp;
+        public String meisaiVersion; // 応募明細の版（排他チェック用）
         public ApplicationForm form;
         public List<KanoubiDate> kanoubiDates;
     }

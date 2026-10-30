@@ -67,21 +67,31 @@ private class Juj_JyujijigyouJisshibiShiteiTest {
         Soudanin_Master__c sodanin = new Soudanin_Master__c(SouM_Sodanin_No__c = SODANIN_NO, SouM_Sodanin_Name__c = '相談 花子');
         insert sodanin;
 
-        // 割当：会員は 11/10 に仮割当（本人割当済）、相談員は 11/3 の 09:00-12:00・13:00-15:00 に確定
+        // 割当（1件＝1時間帯）：会員は 11/10 10:00-11:00 に仮割当（本人割当済）、相談員は 11/3 の 09:00-12:00・13:00-15:00 に確定（2件）
         insert new List<Juji_Jigyo_Wariate__c>{
             new Juji_Jigyo_Wariate__c(
                 Wari_Juji_Jigyo__c = jigyo.Id,
                 Wari_Kaiin__c = member.Id,
                 Wari_Juji_Nengapi__c = Date.newInstance(2026, 11, 10),
                 Wari_Wriate_Flag__c = Juj_JyujijigyouJisshibiShiteiController.FLAG_ON,
-                Wari_JisshiJikantai_Meisai__c = '[{"startTime":"10:00","endTime":"11:00"}]'
+                Wari_Kaisi_Jikoku__c = Time.newInstance(10, 0, 0, 0),
+                Wari_Syuryo_Jikoku__c = Time.newInstance(11, 0, 0, 0)
             ),
             new Juji_Jigyo_Wariate__c(
                 Wari_Juji_Jigyo__c = jigyo.Id,
                 Wari_Soudanin_Master__c = sodanin.Id,
                 Wari_Juji_Nengapi__c = Date.newInstance(2026, 11, 3),
                 Wari_Kakutei_Flag__c = Juj_JyujijigyouJisshibiShiteiController.FLAG_ON,
-                Wari_JisshiJikantai_Meisai__c = '[{"startTime":"09:00","endTime":"12:00","unused":"x"},{"startTime":"13:00","endTime":"15:00"}]'
+                Wari_Kaisi_Jikoku__c = Time.newInstance(9, 0, 0, 0),
+                Wari_Syuryo_Jikoku__c = Time.newInstance(12, 0, 0, 0)
+            ),
+            new Juji_Jigyo_Wariate__c(
+                Wari_Juji_Jigyo__c = jigyo.Id,
+                Wari_Soudanin_Master__c = sodanin.Id,
+                Wari_Juji_Nengapi__c = Date.newInstance(2026, 11, 3),
+                Wari_Kakutei_Flag__c = Juj_JyujijigyouJisshibiShiteiController.FLAG_ON,
+                Wari_Kaisi_Jikoku__c = Time.newInstance(13, 0, 0, 0),
+                Wari_Syuryo_Jikoku__c = Time.newInstance(15, 0, 0, 0)
             )
         };
     }
