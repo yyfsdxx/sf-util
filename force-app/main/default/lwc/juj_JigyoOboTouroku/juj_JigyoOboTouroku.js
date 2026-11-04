@@ -42,7 +42,7 @@ const MSG = {
     JUJISHA_NOT_FOUND: '従事者が存在しません。',
     WEEKDAY_REQUIRED: '従事可能曜日を選択してください。',
     KANOUBI_REQUIRED: '従事可能日を指定してください。',
-    SKILL_REQUIRED: 'スキルを選択してください。',
+    SKILL_REQUIRED: 'スキルはすべての科目を選択してください。',
     CONFIRM_OVERWRITE: '入力中の応募情報は破棄されます。よろしいですか？',
     CONFIRM_SAVE: '入力された内容で応募情報を登録してよろしいですか？', // WLP007-0001
     CONFIRM_DELETE: '削除します。よろしいですか？',
@@ -185,6 +185,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
     meisaiVersion = null; // 応募明細の排他チェック用
     form = emptyForm();
     kanoubiDates = []; // [{ kanoubiDate: 'yyyy-MM-dd', timeSlots: [{ startTime, endTime }] }]
+    skillRenderKey = 0; // スキルのコンボボックス再作成用（標準の未入力エラーは値の再設定では消えないため）
 
     // 子画面の表示有無
     isApplicationSearchOpen = false; // JUJ082
@@ -687,6 +688,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
         this.uketukeNo = app.uketukeNo;
         this.form = { ...emptyForm(), ...app.form };
         this.kanoubiDates = app.kanoubiDates || [];
+        this.skillRenderKey++;
         this.isDirty = false;
     }
 
@@ -755,8 +757,8 @@ export default class JujJigyoOboTouroku extends LightningElement {
         if (ctrl.requiredKanoubi && !this.kanoubiDates.some((k) => k.timeSlots && k.timeSlots.length > 0)) {
             errors.push(MSG.KANOUBI_REQUIRED);
         }
-        // 値が空の科目は未選択とみなす
-        if (ctrl.requiredSkill && !f.skills.some((s) => s.value)) {
+        // スキル：必須の場合は8科目すべて選択（現行と同じ。値が空の科目は未選択とみなす）
+        if (ctrl.requiredSkill && !this.skillItems.every((s) => s.value)) {
             errors.push(MSG.SKILL_REQUIRED);
         }
         // 希望従事日数・連絡先（電話・FAX・Mail）は lightning-input の標準チェック（html の data-validate・pattern。入力不可の項目は対象外）
@@ -800,6 +802,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
         this.uketukeNo = null;
         this.form = emptyForm();
         this.kanoubiDates = [];
+        this.skillRenderKey++;
         this.isDirty = false;
         this.toAddMode();
     }
@@ -912,7 +915,8 @@ export default class JujJigyoOboTouroku extends LightningElement {
     get skillItems() {
         return SKILL_FIELDS.map(([field, label]) => {
             const skill = this.form.skills.find((s) => s.field === field);
-            return { field, label, value: skill ? skill.value : null };
+            // key を変えるとコンボボックスが再作成され、表示中のエラーが消える
+            return { field, key: `${field}_${this.skillRenderKey}`, label, value: skill ? skill.value : null };
         });
     }
 

@@ -324,7 +324,7 @@
                             </div>
                             <lightning-layout multiple-rows>
                                 <template for:each={skillItems} for:item="skill">
-                                    <lightning-layout-item key={skill.field} size="6" padding="horizontal-small" class="slds-m-bottom_x-small">
+                                    <lightning-layout-item key={skill.key} size="6" padding="horizontal-small" class="slds-m-bottom_x-small">
                                         <lightning-combobox label={skill.label} options={skillOptions} value={skill.value} data-field={skill.field} variant="label-inline" onchange={handleSkillChange} disabled={isSkillDisabled} required={isSkillRequired}></lightning-combobox>
                                     </lightning-layout-item>
                                 </template>
