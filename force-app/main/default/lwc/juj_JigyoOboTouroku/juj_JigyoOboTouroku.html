@@ -278,7 +278,12 @@
                         <!-- 希望従事日数のエラーメッセージが表示されても従事経験の位置が変わらないよう、上端に揃える -->
                         <div class="slds-grid slds-gutters_x-small">
                             <div class="slds-col slds-size_1-of-4">
-                                <lightning-input type="number" label={labels.kibouNissu} value={form.kibouNissu} data-field="kibouNissu" data-validate="true" onchange={handleFormChange} required={isKibouNissuRequired} disabled={isApplicationDisabled} min="1" max="999" step="1" message-when-value-missing={kibouNissuRequiredMessage} message-when-bad-input={kibouNissuFormatMessage} message-when-step-mismatch={kibouNissuFormatMessage} message-when-range-underflow={kibouNissuFormatMessage} message-when-range-overflow={kibouNissuFormatMessage}></lightning-input>
+                                <!-- 初期化・読込時にエラー表示を消すため再作成する（formRenderKeys） -->
+                                <template for:each={formRenderKeys} for:item="renderKey">
+                                    <div key={renderKey}>
+                                        <lightning-input type="number" label={labels.kibouNissu} value={form.kibouNissu} data-field="kibouNissu" data-validate="true" onchange={handleFormChange} required={isKibouNissuRequired} disabled={isApplicationDisabled} min="1" max="999" step="1" message-when-value-missing={kibouNissuRequiredMessage} message-when-bad-input={kibouNissuFormatMessage} message-when-step-mismatch={kibouNissuFormatMessage} message-when-range-underflow={kibouNissuFormatMessage} message-when-range-overflow={kibouNissuFormatMessage}></lightning-input>
+                                    </div>
+                                </template>
                             </div>
                             <div class="slds-col slds-size_3-of-4">
                                 <div class="slds-form-element">
@@ -310,10 +315,15 @@
                             <label class="slds-form-element__label">{labels.jujishaFax}</label>
                             <div class="slds-form-element__control"><div class="custom-underline-output">{jujisha.fax}</div></div>
                         </div>
-                        <lightning-input type="tel" label={labels.telFixed} value={form.telFixed} data-field="telFixed" data-validate="true" max-length="14" pattern={telPattern} message-when-pattern-mismatch={telFormatMessages.telFixed} onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
-                        <lightning-input type="tel" label={labels.telMobile} value={form.telMobile} data-field="telMobile" data-validate="true" max-length="14" pattern={telPattern} message-when-pattern-mismatch={telFormatMessages.telMobile} onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
-                        <lightning-input type="tel" label={labels.fax} value={form.fax} data-field="fax" data-validate="true" max-length="14" pattern={telPattern} message-when-pattern-mismatch={telFormatMessages.fax} onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
-                        <lightning-input type="email" label={labels.mail} value={form.mail} data-field="mail" data-validate="true" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                        <!-- 初期化・読込時にエラー表示を消すため再作成する（formRenderKeys） -->
+                        <template for:each={formRenderKeys} for:item="renderKey">
+                            <div key={renderKey}>
+                                <lightning-input type="tel" label={labels.telFixed} value={form.telFixed} data-field="telFixed" data-validate="true" max-length="14" pattern={telPattern} message-when-pattern-mismatch={telFormatMessages.telFixed} onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                                <lightning-input type="tel" label={labels.telMobile} value={form.telMobile} data-field="telMobile" data-validate="true" max-length="14" pattern={telPattern} message-when-pattern-mismatch={telFormatMessages.telMobile} onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                                <lightning-input type="tel" label={labels.fax} value={form.fax} data-field="fax" data-validate="true" max-length="14" pattern={telPattern} message-when-pattern-mismatch={telFormatMessages.fax} onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                                <lightning-input type="email" label={labels.mail} value={form.mail} data-field="mail" data-validate="true" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-input>
+                            </div>
+                        </template>
                         <lightning-textarea label={labels.biko} value={form.biko} data-field="biko" onchange={handleFormChange} disabled={isApplicationDisabled}></lightning-textarea>
                     </lightning-layout-item>
 

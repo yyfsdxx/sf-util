@@ -185,7 +185,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
     meisaiVersion = null; // 応募明細の排他チェック用
     form = emptyForm();
     kanoubiDates = []; // [{ kanoubiDate: 'yyyy-MM-dd', timeSlots: [{ startTime, endTime }] }]
-    skillRenderKey = 0; // スキルのコンボボックス再作成用（標準の未入力エラーは値の再設定では消えないため）
+    formRenderKey = 0; // 入力項目の再作成用（標準のエラー表示は値の再設定では消えないため、初期化・読込時に再作成する）
 
     // 子画面の表示有無
     isApplicationSearchOpen = false; // JUJ082
@@ -688,7 +688,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
         this.uketukeNo = app.uketukeNo;
         this.form = { ...emptyForm(), ...app.form };
         this.kanoubiDates = app.kanoubiDates || [];
-        this.skillRenderKey++;
+        this.formRenderKey++;
         this.isDirty = false;
     }
 
@@ -802,7 +802,7 @@ export default class JujJigyoOboTouroku extends LightningElement {
         this.uketukeNo = null;
         this.form = emptyForm();
         this.kanoubiDates = [];
-        this.skillRenderKey++;
+        this.formRenderKey++;
         this.isDirty = false;
         this.toAddMode();
     }
@@ -915,9 +915,13 @@ export default class JujJigyoOboTouroku extends LightningElement {
     get skillItems() {
         return SKILL_FIELDS.map(([field, label]) => {
             const skill = this.form.skills.find((s) => s.field === field);
-            // key を変えるとコンボボックスが再作成され、表示中のエラーが消える
-            return { field, key: `${field}_${this.skillRenderKey}`, label, value: skill ? skill.value : null };
+            return { field, key: `${field}_${this.formRenderKey}`, label, value: skill ? skill.value : null };
         });
+    }
+
+    // html の for:each で使用し、key が変わると中の入力項目が再作成される
+    get formRenderKeys() {
+        return [this.formRenderKey];
     }
 
     get weekdayItems() {
