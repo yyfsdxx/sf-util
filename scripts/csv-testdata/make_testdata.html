@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>従事事業CSV登録 テストデータ作成</title>
+<style>
+    body { font-family: "Meiryo", sans-serif; margin: 24px; color: #222; }
+    h1 { font-size: 20px; border-left: 6px solid #e8730c; padding-left: 8px; }
+    button { font-size: 15px; padding: 8px 20px; margin-right: 8px; cursor: pointer; }
+    pre { background: #f5f5f5; padding: 12px; font-size: 13px; white-space: pre-wrap; }
+    .note { color: #666; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>従事事業CSV登録 テストデータ作成</h1>
+<p class="note">
+    「フォルダに作成」：選んだフォルダの下に testdata フォルダ（ok／ng／file_ng）と CSV を作成します（Chrome・Edge）。<br>
+    下の一覧から 1 ファイルずつダウンロードすることもできます。いずれも Shift_JIS・CRLF・見出し行あり、ネット接続は不要。<br>
+    ok：全件 OK（2 事業）／ng：第1類のエラー（1 行＝1 ケース、期待結果は expected_ng.md）／file_ng：ファイル単位のエラー（画面に表示）<br>
+    ケースを追加するときは、このファイルをテキストエディタで開き NG_CASES に 1 行足して保存し、ブラウザで開き直す。
+</p>
+<button id="btn">フォルダに作成</button><span id="status" class="note"></span>
+<h2 style="font-size:16px">ファイル（1 ファイルずつダウンロード）</h2>
+<div id="links"></div>
+<h2 style="font-size:16px">期待結果（expected_ng.md）</h2>
+<pre id="expected"></pre>
+
+<script>
+// ===== データ定義（make_testdata.py と同じ内容） =====
+const KEY = ['jigyoNo', 'basyoNo', 'nendo'];
+
+// 列の並び（LWC（juj_JigyoCsvUploader.js）のファイルレイアウト と同じにすること。ずれると全行が No.5 フォーマットエラーになる）
+const COLUMNS = {
+    jigyo: [...KEY, 'jigyoName', 'jigyoKubun', 'sibuCode', 'syakinHoho', 'syakinTani', 'syakingaku', 'syakinZei',
+        'kotuhiHoho', 'kotuhiKazei', 'kotuhigaku', 'kotuhiZei', 'tyosyoSyakin', 'tyosyoSyakinName',
+        'tyosyoKotuhi', 'tyosyoKotuhiName', 'biko', 'hisuYobi', 'hisuKanoHi', 'hisuKiboNisu', 'hisuSkill',
+        'niniSkill', 'niniSkillToki', 'niniTyosyo', 'niniSodan', 'netKubun', 'netTaisyo', 'netKikanTo',
+        'netKikanFrom', 'sibuUserSosa'],
+    meisai: [...KEY, 'jisiNengapi', 'bosyuNinzu', 'kaisiJikoku', 'syuryoJikoku', 'biko'],
+    oubo: [...KEY, 'torokuNo', 'uketukeNo', 'kaiinKubun', 'yobiSun', 'yobiMon', 'yobiTue', 'yobiWed', 'yobiThu',
+        'yobiFri', 'yobiSat', 'kiboNisu', 'jujiKeiken', 'skillSyotoku', 'skillHojin', 'skillSisan',
+        'skillSyohi', 'skillKaisyaho', 'skillZaimu', 'skillJoto', 'skillZoyo', 'skillToki', 'tyosyoRonbun',
+        'sodanKamoku', 'biko', 'tel', 'fax', 'mail'],
+    ouboMeisai: [...KEY, 'torokuNo', 'jujiKanoBi'],
+    wariate: [...KEY, 'jujiNengapi', 'torokuNo', 'tuikaFlag', 'wariFlag', 'kakuteiFlag', 'jujiFlag', 'konkaiFlag', 'biko'],
+    jisseki: [...KEY, 'jujiNengapi', 'torokuNo', 'zeirisiKubun', 'oyaNo', 'hojinNo', 'hojinEdaban', 'jujiJiseki',
+        'syakingaku', 'syakinSyohi', 'syakinGensen', 'ginkoCode', 'sitenCode', 'furikomiSyubetu', 'kozaNo',
+        'kozaMeigi', 'syakinHoho', 'kotuhigaku', 'kotuhiSyohi', 'kotuhiGensen', 'kotuhiHoho', 'kotuhiKazei',
+        'tyosyoSyakin', 'tyosyoSyakinName', 'tyosyoKotuhi', 'tyosyoKotuhiName', 'biko', 'siharaiNengapi',
+        'siharaiJikoDate', 'siharaiJikoTime', 'siharaiUserId', 'kozaSitei', 'tyoseiKingaku', 'furikomigaku']
+};
+
+const FILES = [
+    ['jigyo', '01_従事事業ヘッダ.csv'],
+    ['meisai', '02_従事事業明細.csv'],
+    ['oubo', '03_従事事業応募ヘッダ.csv'],
+    ['ouboMeisai', '04_従事事業応募明細.csv'],
+    ['wariate', '05_従事事業割当.csv'],
+    ['jisseki', '06_従事事業実績.csv']
+];
+
+// ---------- OK データ ----------
+const JIGYO1 = { jigyoNo: '0000001', basyoNo: 'B001', nendo: '2026' };
+const JIGYO2 = { jigyoNo: '0000002', basyoNo: 'B002', nendo: '2026' };
+
+const BASE = {
+    jigyo: {
+        jigyoName: 'テスト相談会', jigyoKubun: '001', sibuCode: '001', syakinHoho: '1', syakinTani: '0',
+        syakingaku: '5000', syakinZei: '1', kotuhiHoho: '1', kotuhiKazei: '0', kotuhigaku: '1000', kotuhiZei: '1',
+        tyosyoSyakin: '24', tyosyoSyakinName: '相談謝金', tyosyoKotuhi: '24', tyosyoKotuhiName: '相談謝金',
+        biko: '', hisuYobi: '1', hisuKanoHi: '0', hisuKiboNisu: '1', hisuSkill: '1', niniSkill: '0',
+        niniSkillToki: '1', niniTyosyo: '1', niniSodan: '1', netKubun: '1', netTaisyo: '0',
+        netKikanTo: '20260430', netKikanFrom: '20260401', sibuUserSosa: '2'
+    },
+    meisai: { jisiNengapi: '20260410', bosyuNinzu: '5', kaisiJikoku: '0900', syuryoJikoku: '1700', biko: '' },
+    oubo: {
+        torokuNo: '1234567', uketukeNo: '1', kaiinKubun: '1', yobiSun: '0', yobiMon: '1', yobiTue: '1',
+        yobiWed: '0', yobiThu: '0', yobiFri: '1', yobiSat: '0', kiboNisu: '3', jujiKeiken: '1',
+        skillSyotoku: '5', skillHojin: '4', skillSisan: '3', skillSyohi: '2', skillKaisyaho: '1',
+        skillZaimu: '3', skillJoto: '3', skillZoyo: '3', skillToki: '', tyosyoRonbun: '', sodanKamoku: '所得税',
+        biko: '', tel: '03-1234-5678', fax: '', mail: 'test@example.com'
+    },
+    ouboMeisai: { torokuNo: '1234567', jujiKanoBi: '20260410' },
+    wariate: { jujiNengapi: '20260410', torokuNo: '1234567', tuikaFlag: '0', wariFlag: '0', kakuteiFlag: '1', jujiFlag: '1', konkaiFlag: '0', biko: '' },
+    jisseki: {
+        jujiNengapi: '20260410', torokuNo: '1234567', zeirisiKubun: '1', oyaNo: '', hojinNo: '', hojinEdaban: '',
+        jujiJiseki: '1.0', syakingaku: '5000', syakinSyohi: '500', syakinGensen: '510', ginkoCode: '0001',
+        sitenCode: '001', furikomiSyubetu: '1', kozaNo: '1234567', kozaMeigi: 'ﾃｽﾄ ﾀﾛｳ', syakinHoho: '1',
+        kotuhigaku: '1000', kotuhiSyohi: '0', kotuhiGensen: '0', kotuhiHoho: '1', kotuhiKazei: '0',
+        tyosyoSyakin: '24', tyosyoSyakinName: '相談謝金', tyosyoKotuhi: '24', tyosyoKotuhiName: '相談謝金',
+        biko: '', siharaiNengapi: '', siharaiJikoDate: '', siharaiJikoTime: '', siharaiUserId: '', kozaSitei: '1',
+        tyoseiKingaku: '0', furikomigaku: ''
+    }
+};
+
+const OK_ROWS = {
+    jigyo: [
+        { ...JIGYO1, ...BASE.jigyo },
+        // 謝金無・交通費無・募集しない・本会作成の事業
+        { ...JIGYO2, ...BASE.jigyo, jigyoName: 'テスト講習会', sibuCode: '000', syakinHoho: '0', syakingaku: '',
+          tyosyoSyakin: '', tyosyoSyakinName: '', kotuhiHoho: '0', kotuhigaku: '0', tyosyoKotuhi: '', tyosyoKotuhiName: '',
+          netKubun: '0', netTaisyo: '', netKikanTo: '', netKikanFrom: '' }
+    ],
+    meisai: [
+        { ...JIGYO1, ...BASE.meisai },
+        { ...JIGYO1, ...BASE.meisai, jisiNengapi: '20260411', kaisiJikoku: '', syuryoJikoku: '' },
+        { ...JIGYO2, ...BASE.meisai, jisiNengapi: '20270331' } // 年度末日
+    ],
+    oubo: [
+        { ...JIGYO1, ...BASE.oubo },
+        { ...JIGYO1, ...BASE.oubo, torokuNo: '7654321', uketukeNo: '2', kaiinKubun: '2', tel: '', fax: '03-1234-5679' }
+    ],
+    ouboMeisai: [
+        { ...JIGYO1, ...BASE.ouboMeisai },
+        { ...JIGYO1, ...BASE.ouboMeisai, jujiKanoBi: '20260411' },
+        { ...JIGYO1, ...BASE.ouboMeisai, torokuNo: '7654321', jujiKanoBi: '20260411' }
+    ],
+    wariate: [
+        { ...JIGYO1, ...BASE.wariate },
+        { ...JIGYO1, ...BASE.wariate, torokuNo: '7654321', jujiNengapi: '20260411', wariFlag: '1', kakuteiFlag: '', jujiFlag: '0' }
+    ],
+    jisseki: [
+        { ...JIGYO1, ...BASE.jisseki },
+        // 本店社員：法人番号・枝番が必須、源泉税額は 0
+        { ...JIGYO1, ...BASE.jisseki, torokuNo: '2345678', zeirisiKubun: '2', hojinNo: '000001', hojinEdaban: '001', syakinGensen: '0' },
+        // 補助開業：親税理士番号が必須
+        { ...JIGYO1, ...BASE.jisseki, torokuNo: '3456789', zeirisiKubun: '4', oyaNo: '1234567', syakinHoho: '3',
+          kotuhiHoho: '3', ginkoCode: '', sitenCode: '', furikomiSyubetu: '', kozaNo: '', kozaMeigi: '', furikomigaku: '5490' }
+    ]
+};
+
+// ---------- NG データ（第1類） ----------
+// [ファイル, 説明, 変更する項目（SHORT は列を 1 つ減らす）, 期待するチェック No.]
+const SHORT = 'SHORT';
+const NG_CASES = [
+    ['jigyo', '必須：従事事業名が空', { jigyoName: '' }, [6]],
+    ['jigyo', '桁数：従事事業名が 33 文字', { jigyoName: 'あ'.repeat(33) }, [7]],
+    ['jigyo', '形式：従事事業No. に英字', { jigyoNo: '12A4567' }, [8]],
+    ['jigyo', '形式：実施年度が 2 桁', { nendo: '26' }, [8]],
+    ['jigyo', '形式：募集期間To が存在しない日付（No.16 の大小比較は行わない）', { netKikanTo: '20260230' }, [8]],
+    ['jigyo', 'コード：謝金支払方法＝9（No.10・12 は行わない）', { syakinHoho: '9' }, [9]],
+    ['jigyo', 'コード＋形式：謝金支払方法＝9、謝金額＝abc（No.10 は行わない）', { syakinHoho: '9', syakingaku: 'abc' }, [8, 9]],
+    ['jigyo', 'No.10：謝金支払方法≠謝金無で謝金額が空', { syakingaku: '' }, [10]],
+    ['jigyo', 'No.10：謝金無で謝金額が 100', { syakinHoho: '0', syakingaku: '100', tyosyoSyakin: '', tyosyoSyakinName: '' }, [10]],
+    ['jigyo', 'No.11：交通費無で交通費額が 50', { kotuhiHoho: '0', kotuhigaku: '50', tyosyoKotuhi: '', tyosyoKotuhiName: '' }, [11]],
+    ['jigyo', 'No.12：支払調書区分（謝金）＝0', { tyosyoSyakin: '0' }, [12]],
+    ['jigyo', 'No.12：謝金無で支払調書区分（謝金）＝24', { syakinHoho: '0', syakingaku: '' }, [12]],
+    ['jigyo', 'No.13：支払調書区分（交通費）が空', { tyosyoKotuhi: '' }, [13]],
+    ['jigyo', 'No.14：必須フラグ 従事可能曜日・従事可能日 がどちらも 1', { hisuKanoHi: '1' }, [14]],
+    ['jigyo', 'No.15：スキルの必須・任意フラグがどちらも 1', { niniSkill: '1' }, [15]],
+    ['jigyo', 'No.16：募集する で募集対象が空', { netTaisyo: '' }, [16]],
+    ['jigyo', 'No.16：募集期間From＞To', { netKikanFrom: '20260501' }, [16]],
+    ['jigyo', 'No.17：支部ユーザ操作が空（事務局ユーザ）', { sibuUserSosa: '' }, [17]],
+    ['jigyo', 'No.18：支部コード 000 で支部ユーザ操作＝可能（事務局ユーザ）', { sibuCode: '000', sibuUserSosa: '1' }, [18]],
+    ['jigyo', 'No.19：事業キー重複（1 行目）', { jigyoNo: '9999999' }, [19]],
+    ['jigyo', 'No.19：事業キー重複（2 行目）', { jigyoNo: '9999999' }, [19]],
+    ['jigyo', 'No.5：列が 1 つ足りない', SHORT, [5]],
+    ['meisai', 'No.31：募集人数＝0', { bosyuNinzu: '0' }, [31]],
+    ['meisai', 'No.32：開始時間＞終了時間', { kaisiJikoku: '1700', syuryoJikoku: '0900' }, [32]],
+    ['meisai', 'No.33：実施年月日が年度外（翌年度 4/1）', { jisiNengapi: '20270401' }, [33]],
+    ['meisai', '形式：開始時間＝2460', { kaisiJikoku: '2460' }, [8]],
+    ['meisai', 'No.34：重複（1 行目）', { jigyoNo: '9999999' }, [34]],
+    ['meisai', 'No.34：重複（2 行目）', { jigyoNo: '9999999' }, [34]],
+    ['oubo', 'No.37：連絡先（TEL）に英字', { tel: '03-abc' }, [37]],
+    ['oubo', 'No.37：連絡先（FAX）に括弧', { fax: '03(1234)5678' }, [37]],
+    ['oubo', 'コード：会員区分＝3', { kaiinKubun: '3' }, [9]],
+    ['oubo', 'コード：従事可能曜日フラグ（月）＝2', { yobiMon: '2' }, [9]],
+    ['oubo', 'コード：スキル（所得税）＝6', { skillSyotoku: '6' }, [9]],
+    ['oubo', 'No.38：重複（1 行目）', { jigyoNo: '9999999' }, [38]],
+    ['oubo', 'No.38：重複（2 行目）', { jigyoNo: '9999999' }, [38]],
+    ['ouboMeisai', 'No.48：従事可能日が年度外（3/31）', { jujiKanoBi: '20260331' }, [48]],
+    ['ouboMeisai', 'No.49：重複（1 行目）', { jigyoNo: '9999999' }, [49]],
+    ['ouboMeisai', 'No.49：重複（2 行目）', { jigyoNo: '9999999' }, [49]],
+    ['wariate', 'No.55：割当フラグ・確定フラグがどちらも 0（空＝0）', { kakuteiFlag: '' }, [55]],
+    ['wariate', 'No.55：割当フラグ・確定フラグがどちらも 1', { wariFlag: '1' }, [55]],
+    ['wariate', 'No.56：従事年月日が年度外', { jujiNengapi: '20260101' }, [56]],
+    ['wariate', 'コード：従事フラグ＝2', { jujiFlag: '2' }, [9]],
+    ['wariate', 'No.57：重複（1 行目）', { jigyoNo: '9999999' }, [57]],
+    ['wariate', 'No.57：重複（2 行目）', { jigyoNo: '9999999' }, [57]],
+    ['jisseki', 'No.67：開業税理士で親税理士番号あり', { oyaNo: '1234567' }, [67]],
+    ['jisseki', 'No.67：補助開業で親税理士番号なし', { zeirisiKubun: '4' }, [67]],
+    ['jisseki', 'No.67：本店社員で法人番号・枝番なし（2 件）', { zeirisiKubun: '2', syakinGensen: '0' }, [67, 67]],
+    ['jisseki', 'No.68：謝金額がマイナス', { syakingaku: '-1' }, [68]],
+    ['jisseki', 'No.69：本店社員で謝金源泉税額あり', { zeirisiKubun: '2', hojinNo: '000001', hojinEdaban: '001' }, [69]],
+    ['jisseki', 'No.70：振込個人で振込先がすべて空（5 件）', { ginkoCode: '', sitenCode: '', furikomiSyubetu: '', kozaNo: '', kozaMeigi: '' }, [70, 70, 70, 70, 70]],
+    ['jisseki', 'No.71：交通費無で支払調書区分（交通費）あり', { kotuhiHoho: '0' }, [71]],
+    ['jisseki', 'No.72：支払年月日あり', { siharaiNengapi: '20260501' }, [72]],
+    ['jisseki', 'No.73：振込額が空で計算値がマイナス', { tyoseiKingaku: '-9999' }, [73]],
+    ['jisseki', 'No.74：従事年月日が年度外', { jujiNengapi: '20270401' }, [74]],
+    ['jisseki', '形式：従事事績＝12.345', { jujiJiseki: '12.345' }, [8]],
+    ['jisseki', 'コード：謝金振込先種別＝3（欠番）', { furikomiSyubetu: '3' }, [9]],
+    ['jisseki', 'No.75：重複（1 行目）', { jigyoNo: '9999999' }, [75]],
+    ['jisseki', 'No.75：重複（2 行目）', { jigyoNo: '9999999' }, [75]]
+];
+
+const EXPECTED_TAIL = `
+## ファイル単位（file_ng、画面に表示）
+
+- 01_見出しのみ.csv → 対象ファイルにはデータが存在しません。（SYSTEM-6103）
+- 02_UTF8.csv → 対象ファイルのフォーマットが不正です。（SYSTEM-6104）
+- 03_拡張子.txt → 対象ファイルには CSV 形式を指定してください。（SYSTEM-6102）
+- 04_空行のみ.csv → データなし（空行・カンマのみの行は読み飛ばす）（SYSTEM-6103）
+
+## 支部ユーザで確認するもの
+
+Apex の TEMP_USER_TYPE を 'SIBU'、TEMP_SIBU_CODE を '001' に変更し、ok/01 を取り込む
+- 2 行目（支部コード 001）→ エラーなし、3 行目（支部コード 000）→ No.20 自支部（連）のデータではありません。
+- 支部ユーザ操作 はチェックしない（No.17・18 は出ない）
+`;
+
+// ===== 作成 =====
+const toLine = (key, row) => COLUMNS[key].map((name) => row[name] ?? '').join(',');
+const header = (key) => COLUMNS[key].join(',');
+const csvText = (lines) => lines.join('\r\n') + '\r\n';
+
+/** ファイルを作る → [{ path, text, encoding }] */
+function buildFiles() {
+    const files = [];
+    FILES.forEach(([key, name]) => {
+        files.push({ path: `ok/${name}`, text: csvText([header(key), ...OK_ROWS[key].map((r) => toLine(key, r))]) });
+    });
+
+    const expected = ['# NG データの期待結果（第1類）', '', '> 取込ユーザ：事務局（Apex の仮の値のまま）。行番号は見出し行を 1 行目とする', ''];
+    const linesByFile = Object.fromEntries(FILES.map(([key]) => [key, [header(key)]]));
+    NG_CASES.forEach(([key, desc, change, checks], i) => {
+        const row = { ...JIGYO1, ...BASE[key], jigyoNo: String(9000000 + i + 1).padStart(7, '0') };
+        let line;
+        if (change === SHORT) {
+            line = toLine(key, row).split(',').slice(0, -1).join(',');
+        } else {
+            Object.assign(row, change);
+            line = toLine(key, row);
+        }
+        linesByFile[key].push(line);
+        expected.push(`- ${key} ${linesByFile[key].length}行目：${desc} → No.${checks.join('・')}`);
+    });
+    FILES.forEach(([key, name]) => files.push({ path: `ng/${name}`, text: csvText(linesByFile[key]) }));
+    files.push({ path: 'expected_ng.md', text: expected.join('\n') + '\n' + EXPECTED_TAIL, encoding: 'utf-8' });
+
+    const jigyoOk = [header('jigyo'), toLine('jigyo', OK_ROWS.jigyo[0])];
+    files.push({ path: 'file_ng/01_見出しのみ.csv', text: csvText([header('jigyo')]) });
+    files.push({ path: 'file_ng/02_UTF8.csv', text: csvText(jigyoOk), encoding: 'utf-8' });
+    files.push({ path: 'file_ng/03_拡張子.txt', text: csvText(jigyoOk) });
+    files.push({ path: 'file_ng/04_空行のみ.csv', text: csvText([header('jigyo'), '', ',,,,', '']) });
+    return files;
+}
+
+// ===== Shift_JIS（CP932）への変換：ブラウザの TextDecoder から逆引き表を作る =====
+let sjisTable = null;
+function buildSjisTable() {
+    const table = new Map();
+    const decoder = new TextDecoder('shift_jis');
+    for (let b = 0xa1; b <= 0xdf; b++) {
+        table.set(decoder.decode(new Uint8Array([b])), [b]); // 半角カナ
+    }
+    const leads = [];
+    for (let b = 0x81; b <= 0x9f; b++) leads.push(b);
+    for (let b = 0xe0; b <= 0xfc; b++) leads.push(b);
+    leads.forEach((lead) => {
+        for (let trail = 0x40; trail <= 0xfc; trail++) {
+            if (trail === 0x7f) continue;
+            const ch = decoder.decode(new Uint8Array([lead, trail]));
+            if (ch.length === 1 && ch !== '�' && !table.has(ch)) {
+                table.set(ch, [lead, trail]);
+            }
+        }
+    });
+    return table;
+}
+function encodeSjis(text) {
+    sjisTable = sjisTable || buildSjisTable();
+    const bytes = [];
+    for (const ch of text) {
+        const code = ch.codePointAt(0);
+        if (code < 0x80) {
+            bytes.push(code);
+        } else {
+            const b = sjisTable.get(ch);
+            if (!b) throw new Error(`Shift_JIS に変換できない文字：${ch}`);
+            bytes.push(...b);
+        }
+    }
+    return new Uint8Array(bytes);
+}
+const encode = (file) => (file.encoding === 'utf-8' ? new TextEncoder().encode(file.text) : encodeSjis(file.text));
+
+// ===== 画面 =====
+// 選んだフォルダの下に testdata/ok・ng・file_ng を作って書き込む（File System Access API）
+async function writeToFolder(files) {
+    const parent = await window.showDirectoryPicker({ mode: 'readwrite' });
+    const root = await parent.getDirectoryHandle('testdata', { create: true });
+    for (const f of files) {
+        const parts = f.path.split('/');
+        let dir = root;
+        for (const name of parts.slice(0, -1)) {
+            dir = await dir.getDirectoryHandle(name, { create: true });
+        }
+        const handle = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(encode(f));
+        await writable.close();
+    }
+}
+
+if (typeof document !== 'undefined') {
+    const files = buildFiles();
+    document.getElementById('expected').textContent = files.find((f) => f.path === 'expected_ng.md').text;
+
+    // 1 ファイルずつのダウンロードリンク（ファイル名は「フォルダ_ファイル名」）
+    const links = document.getElementById('links');
+    let currentFolder = null;
+    files.forEach((f) => {
+        const folder = f.path.includes('/') ? f.path.split('/')[0] : '';
+        if (folder !== currentFolder) {
+            currentFolder = folder;
+            const h = document.createElement('div');
+            h.style.marginTop = '8px';
+            h.style.fontWeight = 'bold';
+            h.textContent = folder || '（直下）';
+            links.appendChild(h);
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([encode(f)]));
+        a.download = f.path.replace('/', '_');
+        a.textContent = f.path.split('/').pop();
+        a.style.marginRight = '16px';
+        links.appendChild(a);
+    });
+
+    const status = document.getElementById('status');
+    document.getElementById('btn').addEventListener('click', async () => {
+        if (!window.showDirectoryPicker) {
+            status.textContent = '　このブラウザはフォルダへの書き込みに対応していません。下の一覧からダウンロードしてください。';
+            return;
+        }
+        try {
+            await writeToFolder(files);
+            status.textContent = `　作成しました（testdata フォルダ、${files.length} ファイル）`;
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                status.textContent = `　エラー：${e.message}`;
+            }
+        }
+    });
+}
+</script>
+</body>
+</html>

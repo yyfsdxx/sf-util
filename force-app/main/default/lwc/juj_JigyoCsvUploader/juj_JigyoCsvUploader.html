@@ -1,0 +1,139 @@
+<template>
+    <!-- 画面上部に寄せるためのコンテナ -->
+    <div class="top-aligned-container">
+        <lightning-card>
+            <!-- 処理中 -->
+            <template if:true={isLoading}>
+                <lightning-spinner alternative-text="処理中" size="medium"></lightning-spinner>
+            </template>
+
+            <!-- 画面タイトル（左側の橙色バーと大きめフォント） -->
+            <h1 class="slds-text-heading_medium title-header">ファイル一括登録</h1>
+            <div class="slds-border_bottom title-boder"></div>
+
+            <!-- エラーメッセージ（ファイル単位のエラー） -->
+            <template if:true={hasHeaderMessages}>
+                <div class="slds-text-color_error slds-m-top_medium slds-p-left_medium">
+                    <ul class="slds-list_dotted">
+                        <template for:each={headerMessages} for:item="msg">
+                            <li key={msg}>{msg}</li>
+                        </template>
+                    </ul>
+                </div>
+            </template>
+
+            <div class="slds-p-around_medium">
+                <template for:each={rows} for:item="row">
+                    <!-- 1行をまとめるFlexコンテナ（横幅100%） -->
+                    <div key={row.id} class="custom-row slds-m-bottom_x-small">
+                        <!-- 1. ラベル（固定幅、チェックボックスのすぐ左） -->
+                        <div class="custom-label slds-truncate" title={row.label}>{row.label}</div>
+
+                        <!-- 2. チェックボックス（テキストのすぐ左） -->
+                        <div class="custom-checkbox">
+                            <lightning-input
+                                type="checkbox"
+                                variant="label-hidden"
+                                data-id={row.id}
+                                onchange={handleCheckboxChange}
+                            >
+                            </lightning-input>
+                        </div>
+
+                        <!-- 3. ファイルパス出力（余った幅をすべて占有する） -->
+                        <div class="custom-input-container">
+                            <input
+                                type="text"
+                                class="underline-input"
+                                value={row.fileName}
+                                placeholder="ファイルを選択してください"
+                                readonly
+                            />
+                        </div>
+
+                        <!-- 4. 参照ボタン（右端に固定） -->
+                        <div class="custom-button">
+                            <lightning-button label="参照" data-id={row.id} onclick={handleBrowseClick}>
+                            </lightning-button>
+
+                            <!-- 隠しファイル入力 -->
+                            <input
+                                type="file"
+                                accept=".csv"
+                                class="slds-hide"
+                                data-fileid={row.id}
+                                onchange={handleFileChange}
+                            />
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- 下部のボタンエリア -->
+            <div slot="footer" class="slds-grid slds-grid_align-spread">
+                <div style="width: 100px">
+                    <lightning-button
+                        label="登録"
+                        variant="brand"
+                        onclick={handleRegisterClick}
+                        disabled={isLoading}
+                        stretch
+                    ></lightning-button>
+                </div>
+                <div class="slds-grid slds-gutters">
+                    <div style="width: 100px" class="slds-m-right_x-small">
+                        <lightning-button label="クリア" onclick={handleClear} stretch></lightning-button>
+                    </div>
+                    <div style="width: 100px">
+                        <lightning-button label="戻る" onclick={handleBack} stretch></lightning-button>
+                    </div>
+                </div>
+            </div>
+        </lightning-card>
+        <!-- ========================================== -->
+        <!-- 削除等の確認モーダル（ポップアップ）         -->
+        <!-- ========================================== -->
+        <template if:true={isModalOpen}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-labelledby="modal-heading"
+                aria-modal="true"
+                aria-describedby="modal-content"
+                class="slds-modal slds-fade-in-open"
+            >
+                <div class="slds-modal__container">
+                    <!-- モーダルヘッダー -->
+                    <header class="slds-modal__header">
+                        <h2 id="modal-heading" class="slds-text-heading_medium slds-hyphenate">{modalTitle}</h2>
+                    </header>
+
+                    <!-- モーダルボディ -->
+                    <div class="slds-modal__content slds-p-around_medium slds-text-align_center" id="modal-content">
+                        <p>{modalMessage}</p>
+                    </div>
+                    <!-- モーダルフッター -->
+                    <footer class="slds-modal__footer">
+                        <div class="slds-grid slds-grid_align-center">
+                            <lightning-button
+                                variant="neutral"
+                                label="いいえ"
+                                title="いいえ"
+                                onclick={closeModal}
+                                class="slds-m-right_x-small"
+                            ></lightning-button>
+                            <lightning-button
+                                variant="brand"
+                                label="はい"
+                                title="はい"
+                                onclick={handleConfirmSave}
+                            ></lightning-button>
+                        </div>
+                    </footer>
+                </div>
+            </section>
+            <!-- モーダルの背景となる暗いオーバーレイ -->
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+    </div>
+</template>
