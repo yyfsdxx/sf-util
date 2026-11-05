@@ -1,15 +1,16 @@
 /**
  * 従事事業CSV登録（ファイル一括登録）
  * ※ 1 ファイルに以下の部品をまとめている：メッセージ／コード変換表／ファイルレイアウト／CSV の読込／
- *   エラーの収集・出力／第1類チェック／事業単位の整理／画面（コンポーネント）。後で差し替える部品は見出しで区切っている。
+ *   エラーの収集・出力／ファイル内チェック／事業単位の整理／整合性チェック／画面（コンポーネント）。後で差し替える部品は見出しで区切っている。
  * 処理の流れ（設計書「31」前提 4）：
  *   登録ボタン → ファイル単位のチェック（No.1～3、画面に表示）→ 確認ダイアログ
- *   → ファイルの読込（No.4・読込不可、画面に表示）→ 第1類チェック（ログに出力）
- *   → ② 事業単位の整理 → 第2類チェック・登録（後続）
+ *   → ファイルの読込（No.4・読込不可、画面に表示）→ ファイル内チェック（ログに出力）
+ *   → ② 事業単位の整理 → ③④ 整合性チェック（ログに出力）→ 事業単位の登録（後続）
  * ※ 行単位のエラーは当面コンソールログに出力し、画面には SYSTEM-6105 のみ表示する【要確認 F-8】
  */
 import { LightningElement, track } from 'lwc';
 import getLoginUserInfo from '@salesforce/apex/Juj_JigyoCsvUploaderController.getLoginUserInfo';
+import checkCategory2 from '@salesforce/apex/Juj_JigyoCsvUploaderController.checkCategory2';
 
 // ============================================================
 // メッセージ
@@ -86,7 +87,7 @@ function getMessage(id, x = '', y = '', z = '') {
 /**
  * 従事事業CSV登録 コード変換表
  * CSV の値（現行コード）→ 選択リストの API 参照名。設計書「26」のコード変換表。
- * ・第1類のコード値チェック（No.9）は、この表にコードがあるかで判定する。
+ * ・ファイル内チェックのコード値チェック（No.9）は、この表にコードがあるかで判定する。
  * ・登録時の変換も、この表（toApiValue）だけを使う。
  * 【要確認 D-54】保持場所が決まるまでここに直接記載する。
  * 【要確認 D-53】選択リストの API 参照名がコードに変更された場合は、値をコードと同じにする（または toApiValue でコードをそのまま返す）。
@@ -417,7 +418,7 @@ async function readCsv(file) {
  * 従事事業CSV登録 エラーの収集・出力
  * 【要確認 F-8】当面は行単位のエラーをブラウザのコンソールログに出力する。出力先を変えるときは outputLog だけを差し替える。
  * ログの形式：
- *   【第1類チェック（前提チェック）】エラー 2 件
+ *   【ファイル内チェック】エラー 2 件
  *   取り込みファイル1.csv
  *       523行目_[従事場所No] には [半角数字] のみ入力可能です。
  */
@@ -427,9 +428,15 @@ const KUBUN = {
     CATEGORY2: 2
 };
 
+// 区分の名称（設計書「31」前提 4。2 つの区分を合わせて「入力チェック」と呼ぶ）
+const KUBUN_NAMES = {
+    [KUBUN.CATEGORY1]: '① ファイル内チェック',
+    [KUBUN.CATEGORY2]: '② 整合性チェック'
+};
+
 const TITLES = {
-    [KUBUN.CATEGORY1]: '【第1類チェック（前提チェック）】',
-    [KUBUN.CATEGORY2]: '【第2類チェック（関連チェック）】'
+    [KUBUN.CATEGORY1]: `【${KUBUN_NAMES[KUBUN.CATEGORY1]}】`,
+    [KUBUN.CATEGORY2]: `【${KUBUN_NAMES[KUBUN.CATEGORY2]}】`
 };
 
 /**
@@ -484,10 +491,102 @@ function outputLog(kubun, errors) {
 }
 
 // ============================================================
-// 第1類チェック（前提チェック）
+// エラーログ（ポップアップ・ダウンロード）
 // ============================================================
 /**
- * 従事事業CSV登録 第1類チェック（前提チェック）
+ * 行単位のエラーがある場合、ポップアップに区分ごとの結果・ファイルごとの件数を表示し、
+ * コンソールログと同じ内容をテキストファイルでダウンロードできるようにする。【要確認 F-8】
+ */
+const ERROR_LOG = {
+    title: 'ファイル一括登録 エラーログ',
+    fileName: 'ファイル一括登録_エラーログ_',
+    newLine: '\r\n', // Windows のメモ帳で開けるよう CRLF・BOM 付き UTF-8 とする
+    bom: '\uFEFF'
+};
+
+// ポップアップに表示する区分の説明
+const KUBUN_DESCRIPTIONS = {
+    [KUBUN.CATEGORY1]: 'ファイルの行ごとに、必須・桁数・形式・コード値・項目の組み合わせ、ファイル内の重複を確認します。',
+    [KUBUN.CATEGORY2]:
+        'ファイル内チェックでエラーがない場合のみ、他のファイルや登録済みデータとの整合性（マスタ・親データの存在、登録済みデータとの重複など）を確認します。'
+};
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function formatDateTime(d) {
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function formatFileDateTime(d) {
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+}
+
+/**
+ * エラーログを作る
+ * @param {Array<{kubun: number, errors: Array}>} results 行ったチェック区分の結果（実行順。エラーがあった区分で終了するため最後がエラーの区分）
+ * @returns {{kubun, total, categories, files, fileName, text}}
+ */
+function createErrorLog(results, now = new Date()) {
+    const failed = results[results.length - 1];
+    const byFile = new Map();
+    failed.errors.forEach((e) => {
+        const f = byFile.get(e.fileKey) || { key: e.fileKey, order: e.order, label: e.label, fileName: e.fileName, count: 0 };
+        f.count++;
+        byFile.set(e.fileKey, f);
+    });
+    const categories = Object.values(KUBUN).map((kubun) => {
+        const result = results.find((r) => r.kubun === kubun);
+        let resultLabel = '未実施';
+        if (result) {
+            resultLabel = result.errors.length > 0 ? `エラー ${result.errors.length} 件` : 'エラーなし';
+        }
+        return {
+            kubun,
+            name: KUBUN_NAMES[kubun],
+            description: KUBUN_DESCRIPTIONS[kubun],
+            result: resultLabel,
+            resultClass: result && result.errors.length > 0 ? 'slds-text-color_error' : 'slds-text-color_weak'
+        };
+    });
+    const lines = [ERROR_LOG.title, `出力日時：${formatDateTime(now)}`];
+    results.forEach((r) => lines.push('', formatLog(r.kubun, r.errors)));
+    return {
+        kubun: failed.kubun,
+        total: failed.errors.length,
+        categories,
+        files: [...byFile.values()].sort((a, b) => a.order - b.order),
+        fileName: `${ERROR_LOG.fileName}${formatFileDateTime(now)}.txt`,
+        text: lines.join('\n').replace(/\n/g, ERROR_LOG.newLine)
+    };
+}
+
+/** テキストファイルをダウンロードする */
+function downloadText(fileName, text) {
+    const content = ERROR_LOG.bom + text;
+    const link = document.createElement('a');
+    let objectUrl = null;
+    try {
+        objectUrl = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+        link.href = objectUrl;
+    } catch (e) {
+        link.href = `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`;
+    }
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    if (objectUrl) {
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    }
+}
+
+// ============================================================
+// ファイル内チェック
+// ============================================================
+/**
+ * 従事事業CSV登録 ファイル内チェック
  * 対象ファイルの 1 行（キー重複はファイル内）だけで判定するチェック（設計書「31」区分 1）。
  * ・全ファイル・全行・全チェックを行う（エラーがあっても次の行・ファイルを続ける）。
  * ・原因のエラーのみ出力する（「31」前提 4 (3)）：
@@ -899,11 +998,11 @@ function checkDuplicates(file, rows, errors) {
 
 // ---------- 本体 ----------
 /**
- * 第1類チェック
+ * ファイル内チェック
  * @param {Array} files 読み込んだファイル [{ fileKey, label, fileName, order, rows: [{ lineNo, values }] }]
  * @param {{userType: string, sibuCode: string}} user 取込ユーザ
  * @returns {{errors: Array, parsedFiles: Array}}
- *   parsedFiles：ファイルごとの行（項目名をキーにした値）。第2類・事業単位の整理で使用する
+ *   parsedFiles：ファイルごとの行（項目名をキーにした値）。整合性チェック・事業単位の整理で使用する
  */
 function checkCategory1(files, user) {
     const ctx = {
@@ -976,8 +1075,8 @@ function checkCategory1(files, user) {
 // ============================================================
 /**
  * 従事事業CSV登録 事業単位の整理（②）
- * 第1類チェックが全件 OK の行を、事業キー（従事事業No＋従事場所No＋実施年度）ごとにまとめる。
- * 第2類チェック・登録は、この単位で行う。
+ * ファイル内チェックが全件 OK の行を、事業キー（従事事業No＋従事場所No＋実施年度）ごとにまとめる。
+ * 整合性チェック・登録は、この単位で行う。
  */
 
 const FILE_KEYS = Object.values(FILE_KEY);
@@ -1026,6 +1125,65 @@ function outputGroupLog(groups) {
 }
 
 // ============================================================
+// 整合性チェック
+// ============================================================
+/**
+ * ③ 取込データ（LWC）と ④ 既存データ（Apex）で判定する（設計書「31」区分 2）。ファイル内チェックのエラーが 0 件の場合のみ行う。
+ * ・③ LWC：取込データだけで判定できるもの。実装方式「LWC＋Apex」のチェックは、取込データで判定できない分の情報
+ *   （有無・件数）を csvResult として Apex に渡す（「24」0-1）。
+ * ・④ Apex：事業を CATEGORY2_BATCH_SIZE 件ずつに分け、順番に呼び出す（読み取りのみ）。
+ * ・Apex のエラーは { fileKey, lineNo, checkNo, messageId, x, y, z } で受け取り、文言はこのファイルのメッセージで作る。
+ */
+const CATEGORY2_BATCH_SIZE = 50; // 1 回の Apex 呼出しの事業数【要確認 F-7】
+
+/**
+ * ③ 取込データでの判定【未実装】
+ * @returns {{errors: Array, csvResults: object}} csvResults：事業キー → Apex に渡す取込データの判定結果
+ */
+function checkCategory2Lwc(groups) {
+    const errors = [];
+    const csvResults = {};
+    groups.forEach((g) => {
+        // TODO No.27・29・36・42～47・51・52・61～65・81～83 の取込データの部分
+        csvResults[g.key] = {};
+    });
+    return { errors, csvResults };
+}
+
+/** Apex に渡すリクエスト（JSON 文字列）を CATEGORY2_BATCH_SIZE 事業ずつ作る */
+function toCategory2Requests(groups, csvResults) {
+    const jigyoList = groups.map((g) => ({
+        key: g.key,
+        jigyoNo: g.jigyoNo,
+        basyoNo: g.basyoNo,
+        nendo: g.nendo,
+        rows: Object.values(FILE_KEY).flatMap((fileKey) =>
+            g.files[fileKey].map((r) => ({ fileKey, lineNo: r.lineNo, data: r.data }))
+        ),
+        csvResult: csvResults[g.key]
+    }));
+    const requests = [];
+    for (let i = 0; i < jigyoList.length; i += CATEGORY2_BATCH_SIZE) {
+        requests.push(JSON.stringify({ jigyoList: jigyoList.slice(i, i + CATEGORY2_BATCH_SIZE) }));
+    }
+    return requests;
+}
+
+/** Apex のエラーを共通の形にする（null の置換値は空にする） */
+function fromApexError(e, filesByKey) {
+    return createError(
+        KUBUN.CATEGORY2,
+        filesByKey[e.fileKey],
+        e.lineNo,
+        e.checkNo,
+        e.messageId,
+        e.x ?? '',
+        e.y ?? '',
+        e.z ?? ''
+    );
+}
+
+// ============================================================
 // 画面（コンポーネント）
 // ============================================================
 const CSV_EXTENSION = /\.csv$/i;
@@ -1043,6 +1201,9 @@ export default class JujJigyoCsvUploader extends LightningElement {
     loginUser;
     // 選択したファイル（行の id → File）
     selectedFiles = {};
+    // 行単位のエラー（ポップアップ・ダウンロード用。createErrorLog の戻り値）
+    errorLog = null;
+    isErrorModalOpen = false;
 
     @track rows = [
         { id: '1', fileKey: FILE_KEY.JIGYO, label: '従事事業ヘッダ', fileName: '', isChecked: false },
@@ -1104,6 +1265,7 @@ export default class JujJigyoCsvUploader extends LightningElement {
         });
         this.selectedFiles = {};
         this.headerMessages = [];
+        this.errorLog = null;
 
         const checkboxes = this.template.querySelectorAll('lightning-input[type="checkbox"]');
         checkboxes.forEach((checkbox) => {
@@ -1123,6 +1285,7 @@ export default class JujJigyoCsvUploader extends LightningElement {
     // 登録ボタン：ファイル単位のチェック（No.1～3）の後、確認ダイアログを表示する
     handleRegisterClick() {
         this.headerMessages = [];
+        this.errorLog = null;
         const errors = this.checkSelectedFiles();
         if (errors.length > 0) {
             this.showHeaderMessages(errors);
@@ -1207,13 +1370,16 @@ export default class JujJigyoCsvUploader extends LightningElement {
             }
         });
 
-        // 第1類チェック（行単位のエラーはログに出力する）
+        // ファイル内チェック（行単位のエラーはログに出力する）
         let parsedFiles = [];
+        const checkResults = [];
         if (files.length > 0) {
             const category1 = checkCategory1(files, this.loginUser);
             outputLog(KUBUN.CATEGORY1, category1.errors);
+            checkResults.push({ kubun: KUBUN.CATEGORY1, errors: category1.errors });
             if (category1.errors.length > 0) {
                 screenErrors.push(getMessage('SYSTEM-6105'));
+                this.showErrorLog(checkResults);
             }
             parsedFiles = category1.parsedFiles;
         }
@@ -1226,7 +1392,30 @@ export default class JujJigyoCsvUploader extends LightningElement {
         const groups = groupByJigyo(parsedFiles);
         outputGroupLog(groups);
 
-        // TODO ③④ 第2類チェック、事業単位の登録
+        // ③④ 整合性チェック（行単位のエラーはログに出力する）
+        const category2Errors = await this.runCategory2(groups, parsedFiles);
+        outputLog(KUBUN.CATEGORY2, category2Errors);
+        checkResults.push({ kubun: KUBUN.CATEGORY2, errors: category2Errors });
+        if (category2Errors.length > 0) {
+            this.showHeaderMessages([getMessage('SYSTEM-6105')]);
+            this.showErrorLog(checkResults);
+            return;
+        }
+
+        // TODO 事業単位の登録
+    }
+
+    async runCategory2(groups, parsedFiles) {
+        const filesByKey = Object.fromEntries(parsedFiles.map((f) => [f.fileKey, f]));
+        const lwc = checkCategory2Lwc(groups);
+        const errors = [...lwc.errors];
+        // 5 秒を超える同期リクエストは組織全体で同時 10 件までのため、並列にせず順番に呼び出す【要確認 F-7】
+        for (const requestJson of toCategory2Requests(groups, lwc.csvResults)) {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await checkCategory2({ requestJson });
+            errors.push(...(result.errors || []).map((e) => fromApexError(e, filesByKey)));
+        }
+        return errors;
     }
 
     // ========== メッセージ ==========
@@ -1237,5 +1426,39 @@ export default class JujJigyoCsvUploader extends LightningElement {
 
     get hasHeaderMessages() {
         return this.headerMessages.length > 0;
+    }
+
+    // ========== エラーログのポップアップ ==========
+
+    // チェック終了時に自動で表示する（閉じた後は画面の「エラー内容を表示」から再表示できる）
+    showErrorLog(results) {
+        this.errorLog = createErrorLog(results);
+        this.isErrorModalOpen = true;
+    }
+
+    get hasErrorLog() {
+        return this.errorLog !== null;
+    }
+
+    get errorModalMessage() {
+        return `${KUBUN_NAMES[this.errorLog.kubun]}でエラーが ${this.errorLog.total} 件見つかりました。`;
+    }
+
+    // ファイル内チェックでエラーの場合、整合性チェックは行っていないことを示す
+    get showCategory2Note() {
+        return this.errorLog.kubun === KUBUN.CATEGORY1;
+    }
+
+    openErrorModal() {
+        this.isErrorModalOpen = true;
+    }
+
+    closeErrorModal() {
+        this.isErrorModalOpen = false;
+    }
+
+    handleDownloadErrorLog() {
+        downloadText(this.errorLog.fileName, this.errorLog.text);
+        this.isErrorModalOpen = false;
     }
 }

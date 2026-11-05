@@ -19,6 +19,15 @@
                             <li key={msg}>{msg}</li>
                         </template>
                     </ul>
+                    <!-- 行単位のエラーがある場合：エラー内容のポップアップを再表示 -->
+                    <template if:true={hasErrorLog}>
+                        <lightning-button
+                            variant="base"
+                            label="エラー内容を表示"
+                            icon-name="utility:preview"
+                            onclick={openErrorModal}
+                        ></lightning-button>
+                    </template>
                 </div>
             </template>
 
@@ -133,6 +142,99 @@
                 </div>
             </section>
             <!-- モーダルの背景となる暗いオーバーレイ -->
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- ========================================== -->
+        <!-- エラー内容のポップアップ（行単位のエラー）     -->
+        <!-- ========================================== -->
+        <template if:true={isErrorModalOpen}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-labelledby="error-modal-heading"
+                aria-modal="true"
+                aria-describedby="error-modal-content"
+                class="slds-modal slds-modal_medium slds-fade-in-open"
+            >
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 id="error-modal-heading" class="slds-text-heading_medium slds-hyphenate">取込エラー</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium" id="error-modal-content">
+                        <!-- 結果 -->
+                        <p class="slds-text-color_error slds-text-title_bold">{errorModalMessage}</p>
+                        <p class="slds-m-top_x-small">
+                            ファイルの登録は行われていません。エラーログをダウンロードし、CSV ファイルを修正してから再度登録してください。
+                        </p>
+
+                        <!-- チェック区分ごとの結果と説明 -->
+                        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-m-top_medium">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th scope="col" style="width: 13rem">チェック</th>
+                                    <th scope="col">確認内容</th>
+                                    <th scope="col" style="width: 8rem">結果</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template for:each={errorLog.categories} for:item="c">
+                                    <tr key={c.kubun}>
+                                        <td>{c.name}</td>
+                                        <td class="slds-cell-wrap">{c.description}</td>
+                                        <td class={c.resultClass}>{c.result}</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        <template if:true={showCategory2Note}>
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-top_x-small">
+                                ※ ファイル内チェックでエラーがある場合、整合性チェックは行いません。修正後に再度登録すると、整合性チェックのエラーが見つかる場合があります。
+                            </p>
+                        </template>
+
+                        <!-- ファイルごとのエラー件数 -->
+                        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-m-top_medium">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th scope="col" style="width: 13rem">登録対象</th>
+                                    <th scope="col">ファイル名</th>
+                                    <th scope="col" style="width: 8rem">エラー件数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template for:each={errorLog.files} for:item="f">
+                                    <tr key={f.key}>
+                                        <td>{f.label}</td>
+                                        <td class="slds-cell-wrap">{f.fileName}</td>
+                                        <td>{f.count} 件</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <div class="slds-grid slds-grid_align-center">
+                            <lightning-button
+                                variant="neutral"
+                                label="キャンセル"
+                                title="キャンセル"
+                                onclick={closeErrorModal}
+                                class="slds-m-right_x-small"
+                            ></lightning-button>
+                            <lightning-button
+                                variant="brand"
+                                label="エラーログをダウンロード"
+                                title="エラーログをダウンロード"
+                                icon-name="utility:download"
+                                onclick={handleDownloadErrorLog}
+                            ></lightning-button>
+                        </div>
+                    </footer>
+                </div>
+            </section>
             <div class="slds-backdrop slds-backdrop_open"></div>
         </template>
     </div>

@@ -16,7 +16,7 @@
 <p class="note">
     「フォルダに作成」：選んだフォルダの下に testdata フォルダ（ok／ng／file_ng）と CSV を作成します（Chrome・Edge）。<br>
     下の一覧から 1 ファイルずつダウンロードすることもできます。いずれも Shift_JIS・CRLF・見出し行あり、ネット接続は不要。<br>
-    ok：全件 OK（2 事業）／ng：第1類のエラー（1 行＝1 ケース、期待結果は expected_ng.md）／file_ng：ファイル単位のエラー（画面に表示）<br>
+    ok：全件 OK（2 事業）／ng：ファイル内チェックのエラー（1 行＝1 ケース、期待結果は expected_ng.md）／file_ng：ファイル単位のエラー（画面に表示）<br>
     ケースを追加するときは、このファイルをテキストエディタで開き NG_CASES に 1 行足して保存し、ブラウザで開き直す。
 </p>
 <button id="btn">フォルダに作成</button><span id="status" class="note"></span>
@@ -48,6 +48,16 @@ const COLUMNS = {
         'kozaMeigi', 'syakinHoho', 'kotuhigaku', 'kotuhiSyohi', 'kotuhiGensen', 'kotuhiHoho', 'kotuhiKazei',
         'tyosyoSyakin', 'tyosyoSyakinName', 'tyosyoKotuhi', 'tyosyoKotuhiName', 'biko', 'siharaiNengapi',
         'siharaiJikoDate', 'siharaiJikoTime', 'siharaiUserId', 'kozaSitei', 'tyoseiKingaku', 'furikomigaku']
+};
+
+// 見出し行（新機能設計書のファイルレイアウトの項目名。チェックでは読み飛ばす）
+const HEADERS = {
+    jigyo: ["従事事業No", "従事場所No", "実施年度", "従事事業名", "事業区分", "支部コード", "謝金支払方法", "謝金単位区分", "謝金額", "謝金額内税・外税", "交通費支払方法", "交通費課税区分", "交通費額", "交通費額内税・外税", "支払調書区分（謝金）", "支払調書区分名称（謝金）", "支払調書区分（交通費）", "支払調書区分名称（交通費）", "備考", "応募時必須入力項目フラグ（従事可能曜日）", "応募時必須入力項目フラグ（従事可能日）", "応募時必須入力項目フラグ（希望従事日数）", "応募時必須入力項目フラグ（スキル（5段階））", "応募時任意入力項目フラグ（スキル（5段階））", "応募時任意入力項目フラグ（スキル特記事項）", "応募時任意入力項目フラグ（主な著書、論文）", "応募時任意入力項目フラグ（相談科目）", "インターネット募集区分", "インターネット募集対象", "インターネット募集期間To", "インターネット募集期間From", "支部ユーザ操作"],
+    meisai: ["従事事業No", "従事場所No", "実施年度", "実施年月日", "募集人数", "開始時間", "終了時間", "備考"],
+    oubo: ["従事事業No", "従事場所No", "実施年度", "登録番号", "受付番号", "会員区分", "従事可能曜日フラグ（日）", "従事可能曜日フラグ（月）", "従事可能曜日フラグ（火）", "従事可能曜日フラグ（水）", "従事可能曜日フラグ（木）", "従事可能曜日フラグ（金）", "従事可能曜日フラグ（土）", "希望従事日数", "従事経験", "スキル（所得税）", "スキル（法人税）", "スキル（資産税）", "スキル（消費税）", "スキル（会社法）", "スキル（財務会計）", "スキル（譲渡・山林）", "スキル（贈与税）", "スキル特記事項", "主な著書、論文", "相談科目", "備考", "連絡先（TEL）", "連絡先（FAX）", "連絡先（Mail）"],
+    ouboMeisai: ["従事事業No", "従事場所No", "実施年度", "登録番号", "従事可能日"],
+    wariate: ["従事事業No", "従事場所No", "実施年度", "従事年月日", "登録番号", "追加フラグ", "割当フラグ", "確定フラグ", "従事フラグ", "今回フラグ", "備考"],
+    jisseki: ["従事事業No", "従事場所No", "実施年度", "従事年月日", "登録番号", "税理士区分", "親税理士番号", "法人番号", "法人枝番", "従事事績", "謝金額", "謝金消費税額", "謝金源泉税額", "謝金振込先銀行コード", "謝金振込先支店コード", "謝金振込先種別", "謝金振込先口座番号", "謝金振込先口座名義", "謝金支払方法", "交通費額", "交通費消費税額", "交通費源泉税額", "交通費支払方法", "交通費課税区分", "支払調書区分（謝金）", "支払調書区分名称（謝金）", "支払調書区分（交通費）", "支払調書区分名称（交通費）", "備考", "支払年月日", "支払出力実行日", "支払出力実行時刻", "支払出力ユーザID", "口座指定", "調整金額", "振込額"]
 };
 
 const FILES = [
@@ -129,7 +139,7 @@ const OK_ROWS = {
     ]
 };
 
-// ---------- NG データ（第1類） ----------
+// ---------- NG データ（ファイル内チェック） ----------
 // [ファイル, 説明, 変更する項目（SHORT は列を 1 つ減らす）, 期待するチェック No.]
 const SHORT = 'SHORT';
 const NG_CASES = [
@@ -210,7 +220,7 @@ Apex の TEMP_USER_TYPE を 'SIBU'、TEMP_SIBU_CODE を '001' に変更し、ok/
 
 // ===== 作成 =====
 const toLine = (key, row) => COLUMNS[key].map((name) => row[name] ?? '').join(',');
-const header = (key) => COLUMNS[key].join(',');
+const header = (key) => HEADERS[key].join(',');
 const csvText = (lines) => lines.join('\r\n') + '\r\n';
 
 /** ファイルを作る → [{ path, text, encoding }] */
@@ -220,7 +230,7 @@ function buildFiles() {
         files.push({ path: `ok/${name}`, text: csvText([header(key), ...OK_ROWS[key].map((r) => toLine(key, r))]) });
     });
 
-    const expected = ['# NG データの期待結果（第1類）', '', '> 取込ユーザ：事務局（Apex の仮の値のまま）。行番号は見出し行を 1 行目とする', ''];
+    const expected = ['# NG データの期待結果（ファイル内チェック）', '', '> 取込ユーザ：事務局（Apex の仮の値のまま）。行番号は見出し行を 1 行目とする', ''];
     const linesByFile = Object.fromEntries(FILES.map(([key]) => [key, [header(key)]]));
     NG_CASES.forEach(([key, desc, change, checks], i) => {
         const row = { ...JIGYO1, ...BASE[key], jigyoNo: String(9000000 + i + 1).padStart(7, '0') };
