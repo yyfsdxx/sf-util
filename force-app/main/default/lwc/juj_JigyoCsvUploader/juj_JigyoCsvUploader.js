@@ -428,16 +428,7 @@ const KUBUN = {
     CATEGORY2: 2
 };
 
-// 区分の名称（設計書「31」前提 4。2 つの区分を合わせて「入力チェック」と呼ぶ）
-const KUBUN_NAMES = {
-    [KUBUN.CATEGORY1]: '① ファイル内チェック',
-    [KUBUN.CATEGORY2]: '② 整合性チェック'
-};
-
-const TITLES = {
-    [KUBUN.CATEGORY1]: `【${KUBUN_NAMES[KUBUN.CATEGORY1]}】`,
-    [KUBUN.CATEGORY2]: `【${KUBUN_NAMES[KUBUN.CATEGORY2]}】`
-};
+// ※ 区分（1：ファイル内チェック、2：整合性チェック。設計書「31」前提 4）は内部の分類のため、画面・ログには表示しない
 
 /**
  * エラー 1 件
@@ -462,13 +453,9 @@ function createError(kubun, file, lineNo, checkNo, messageId, x, y, z) {
 }
 
 /** ログの文字列を作る（ファイルの順 → 行番号。同じ行はチェックした順＝項目の順） */
-function formatLog(kubun, errors) {
-    const title = TITLES[kubun];
-    if (errors.length === 0) {
-        return `${title}エラーなし`;
-    }
+function formatLog(errors) {
     const sorted = [...errors].sort((a, b) => a.order - b.order || a.lineNo - b.lineNo);
-    const lines = [`${title}エラー ${errors.length} 件`];
+    const lines = [`エラー ${errors.length} 件`];
     let currentFile = null;
     sorted.forEach((e) => {
         if (e.fileKey !== currentFile) {
@@ -480,21 +467,24 @@ function formatLog(kubun, errors) {
     return lines.join('\n');
 }
 
-/** ログに出力する（詳細なエラー情報はデバッグ用に console.debug へ） */
+/** ログに出力する（エラーがある場合のみ。詳細なエラー情報・区分はデバッグ用に console.debug へ） */
 function outputLog(kubun, errors) {
-    // eslint-disable-next-line no-console
-    console.log(formatLog(kubun, errors));
-    if (errors.length > 0) {
+    if (errors.length === 0) {
         // eslint-disable-next-line no-console
-        console.debug(errors);
+        console.debug(`区分 ${kubun}：エラーなし`);
+        return;
     }
+    // eslint-disable-next-line no-console
+    console.log(formatLog(errors));
+    // eslint-disable-next-line no-console
+    console.debug(errors);
 }
 
 // ============================================================
 // エラーログ（ポップアップ・ダウンロード）
 // ============================================================
 /**
- * 行単位のエラーがある場合、ポップアップに区分ごとの結果・ファイルごとの件数を表示し、
+ * 行単位のエラーがある場合、ポップアップにエラー件数・ファイルごとの件数を表示し、
  * コンソールログと同じ内容をテキストファイルでダウンロードできるようにする。【要確認 F-8】
  */
 const ERROR_LOG = {
@@ -502,13 +492,6 @@ const ERROR_LOG = {
     fileName: 'ファイル一括登録_エラーログ_',
     newLine: '\r\n', // Windows のメモ帳で開けるよう CRLF・BOM 付き UTF-8 とする
     bom: '\uFEFF'
-};
-
-// ポップアップに表示する区分の説明
-const KUBUN_DESCRIPTIONS = {
-    [KUBUN.CATEGORY1]: 'ファイルの行ごとに、必須・桁数・形式・コード値・項目の組み合わせ、ファイル内の重複を確認します。',
-    [KUBUN.CATEGORY2]:
-        'ファイル内チェックでエラーがない場合のみ、他のファイルや登録済みデータとの整合性（マスタ・親データの存在、登録済みデータとの重複など）を確認します。'
 };
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -523,37 +506,19 @@ function formatFileDateTime(d) {
 
 /**
  * エラーログを作る
- * @param {Array<{kubun: number, errors: Array}>} results 行ったチェック区分の結果（実行順。エラーがあった区分で終了するため最後がエラーの区分）
- * @returns {{kubun, total, categories, files, fileName, text}}
+ * @param {Array} errors エラーがあった区分のエラー（エラーがあればその区分で終了する）
+ * @returns {{total, files, fileName, text}}
  */
-function createErrorLog(results, now = new Date()) {
-    const failed = results[results.length - 1];
+function createErrorLog(errors, now = new Date()) {
     const byFile = new Map();
-    failed.errors.forEach((e) => {
+    errors.forEach((e) => {
         const f = byFile.get(e.fileKey) || { key: e.fileKey, order: e.order, label: e.label, fileName: e.fileName, count: 0 };
         f.count++;
         byFile.set(e.fileKey, f);
     });
-    const categories = Object.values(KUBUN).map((kubun) => {
-        const result = results.find((r) => r.kubun === kubun);
-        let resultLabel = '未実施';
-        if (result) {
-            resultLabel = result.errors.length > 0 ? `エラー ${result.errors.length} 件` : 'エラーなし';
-        }
-        return {
-            kubun,
-            name: KUBUN_NAMES[kubun],
-            description: KUBUN_DESCRIPTIONS[kubun],
-            result: resultLabel,
-            resultClass: result && result.errors.length > 0 ? 'slds-text-color_error' : 'slds-text-color_weak'
-        };
-    });
-    const lines = [ERROR_LOG.title, `出力日時：${formatDateTime(now)}`];
-    results.forEach((r) => lines.push('', formatLog(r.kubun, r.errors)));
+    const lines = [ERROR_LOG.title, `出力日時：${formatDateTime(now)}`, '', formatLog(errors)];
     return {
-        kubun: failed.kubun,
-        total: failed.errors.length,
-        categories,
+        total: errors.length,
         files: [...byFile.values()].sort((a, b) => a.order - b.order),
         fileName: `${ERROR_LOG.fileName}${formatFileDateTime(now)}.txt`,
         text: lines.join('\n').replace(/\n/g, ERROR_LOG.newLine)
@@ -1206,9 +1171,9 @@ export default class JujJigyoCsvUploader extends LightningElement {
     isErrorModalOpen = false;
 
     @track rows = [
-        { id: '1', fileKey: FILE_KEY.JIGYO, label: '従事事業ヘッダ', fileName: '', isChecked: false },
+        { id: '1', fileKey: FILE_KEY.JIGYO, label: '従事事業', fileName: '', isChecked: false },
         { id: '2', fileKey: FILE_KEY.MEISAI, label: '従事事業明細', fileName: '', isChecked: false },
-        { id: '3', fileKey: FILE_KEY.OUBO, label: '従事事業応募ヘッダ', fileName: '', isChecked: false },
+        { id: '3', fileKey: FILE_KEY.OUBO, label: '従事事業応募', fileName: '', isChecked: false },
         { id: '4', fileKey: FILE_KEY.OUBO_MEISAI, label: '従事事業応募明細', fileName: '', isChecked: false },
         { id: '5', fileKey: FILE_KEY.WARIATE, label: '従事事業割当', fileName: '', isChecked: false },
         { id: '6', fileKey: FILE_KEY.JISSEKI, label: '従事事業実績', fileName: '', isChecked: false }
@@ -1230,6 +1195,8 @@ export default class JujJigyoCsvUploader extends LightningElement {
         const rowId = event.target.dataset.id;
         const fileInput = this.template.querySelector(`input[data-fileid="${rowId}"]`);
         if (fileInput) {
+            // 同じファイル（修正後の CSV 等）を選び直した場合も change が発生するよう、選択値を空にしてから開く
+            fileInput.value = null;
             fileInput.click();
         }
     }
@@ -1245,6 +1212,8 @@ export default class JujJigyoCsvUploader extends LightningElement {
                 // event.target.value を使用してブラウザが提供できる最大のパス情報（fakepath）を取得
                 this.rows[rowIndex].fileName = event.target.value;
                 this.selectedFiles[rowId] = file;
+                // ファイルを選び直したら、前回の取込のエラー（画面のメッセージ・エラー内容）を消す
+                this.clearErrors();
             }
         }
     }
@@ -1372,14 +1341,12 @@ export default class JujJigyoCsvUploader extends LightningElement {
 
         // ファイル内チェック（行単位のエラーはログに出力する）
         let parsedFiles = [];
-        const checkResults = [];
         if (files.length > 0) {
             const category1 = checkCategory1(files, this.loginUser);
             outputLog(KUBUN.CATEGORY1, category1.errors);
-            checkResults.push({ kubun: KUBUN.CATEGORY1, errors: category1.errors });
             if (category1.errors.length > 0) {
                 screenErrors.push(getMessage('SYSTEM-6105'));
-                this.showErrorLog(checkResults);
+                this.showErrorLog(category1.errors);
             }
             parsedFiles = category1.parsedFiles;
         }
@@ -1395,10 +1362,9 @@ export default class JujJigyoCsvUploader extends LightningElement {
         // ③④ 整合性チェック（行単位のエラーはログに出力する）
         const category2Errors = await this.runCategory2(groups, parsedFiles);
         outputLog(KUBUN.CATEGORY2, category2Errors);
-        checkResults.push({ kubun: KUBUN.CATEGORY2, errors: category2Errors });
         if (category2Errors.length > 0) {
             this.showHeaderMessages([getMessage('SYSTEM-6105')]);
-            this.showErrorLog(checkResults);
+            this.showErrorLog(category2Errors);
             return;
         }
 
@@ -1431,9 +1397,15 @@ export default class JujJigyoCsvUploader extends LightningElement {
     // ========== エラーログのポップアップ ==========
 
     // チェック終了時に自動で表示する（閉じた後は画面の「エラー内容を表示」から再表示できる）
-    showErrorLog(results) {
-        this.errorLog = createErrorLog(results);
+    showErrorLog(errors) {
+        this.errorLog = createErrorLog(errors);
         this.isErrorModalOpen = true;
+    }
+
+    clearErrors() {
+        this.headerMessages = [];
+        this.errorLog = null;
+        this.isErrorModalOpen = false;
     }
 
     get hasErrorLog() {
@@ -1441,12 +1413,7 @@ export default class JujJigyoCsvUploader extends LightningElement {
     }
 
     get errorModalMessage() {
-        return `${KUBUN_NAMES[this.errorLog.kubun]}でエラーが ${this.errorLog.total} 件見つかりました。`;
-    }
-
-    // ファイル内チェックでエラーの場合、整合性チェックは行っていないことを示す
-    get showCategory2Note() {
-        return this.errorLog.kubun === KUBUN.CATEGORY1;
+        return `エラーが ${this.errorLog.total} 件見つかりました。`;
     }
 
     openErrorModal() {
