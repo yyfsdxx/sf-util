@@ -70,9 +70,9 @@ const NENDO_PATTERN = /^[0-9]{4}$/;
 // ※ pattern 属性は v フラグの正規表現として評価されるため、ハイフンはエスケープする（未エスケープだと正規表現が無効になりチェックされない）
 const TEL_PATTERN = '[0-9\\-]*';
 
-// 従事経験の値
-const KEIKEN_ARI = '有';
-const KEIKEN_NASHI = '無';
+// 従事経験の値（API 参照名。表示ラベルは 1＝有、2＝無）
+const KEIKEN_ARI = '1';
+const KEIKEN_NASHI = '2';
 
 // スキル評価の選択肢
 const SKILL_OPTIONS = [

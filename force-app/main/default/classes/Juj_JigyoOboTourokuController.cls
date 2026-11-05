@@ -15,11 +15,11 @@ public with sharing class Juj_JigyoOboTourokuController {
     private static final String TYPE_MEMBER = 'MEMBER'; // 会員
     private static final String TYPE_SODANIN = 'SODANIN'; // 相談員
 
-    // 従事可能曜日フラグの値
+    // 従事可能曜日フラグの値（API 参照名。表示ラベルは 1＝可、0＝不可）
     @TestVisible
-    private static final String WEEKDAY_KA = '可';
+    private static final String WEEKDAY_KA = '1';
     @TestVisible
-    private static final String WEEKDAY_FUKA = '不可';
+    private static final String WEEKDAY_FUKA = '0';
 
     // 従事可能曜日（画面の値）と従事可能曜日フラグの項目
     @TestVisible
@@ -81,9 +81,6 @@ public with sharing class Juj_JigyoOboTourokuController {
     private static final String REQUIRED_ON = '必須'; // 必須入力フラグ（ほかに「省略可」）
     @TestVisible
     private static final String OPTIONAL_OFF = '禁止'; // 任意入力フラグ（ほかに「許可」）
-
-    // 応募の氏名の桁数（超える場合は切り捨てる）
-    private static final Integer SHIMEI_LENGTH = 32;
 
     // 共通部品の引数
     private static final String OBO_OBJECT_NAME = 'Juji_Jigyo_Oubo__c'; // 排他チェックの対象
@@ -261,8 +258,6 @@ public with sharing class Juj_JigyoOboTourokuController {
             if (uketukeNo != null) {
                 rec.Oubo_Uketuke_No__c = uketukeNo;
             }
-            // 氏名は追加・変更とも従事者の氏名を設定する（画面表示・検索には使用しない）
-            rec.Oubo_Shimei__c = String.isBlank(jujisha.name) ? null : jujisha.name.left(SHIMEI_LENGTH);
             applyForm(rec, request.form);
             if (isAdd) {
                 Database.insert(rec, AccessLevel.USER_MODE);

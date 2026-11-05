@@ -11,6 +11,7 @@ private class Juj_JigyoOboTourokuControllerTest {
     private static final String WRONG_JIGYO_NO = '9999999';
     private static final String MEMBER_NO = '1234567';
     private static final String SODANIN_NO = '7654321';
+    private static final String KEIKEN_ARI = '1'; // 従事経験「有」の API 参照名
 
     @TestSetup
     static void setup() {
@@ -92,7 +93,7 @@ private class Juj_JigyoOboTourokuControllerTest {
         f.allDays = false;
         f.weekdays = new List<String>{ '月', '水' };
         f.kibouNissu = '3';
-        f.keiken = '有';
+        f.keiken = KEIKEN_ARI;
         Juj_JigyoOboTourokuController.SkillValue skill = new Juj_JigyoOboTourokuController.SkillValue();
         skill.field = Juj_JigyoOboTourokuController.SKILL_FIELDS[0];
         skill.value = '5';
@@ -442,15 +443,14 @@ private class Juj_JigyoOboTourokuControllerTest {
         Assert.areEqual(6, num(r, 'uketukeNo'), '最大値＋1 で採番されること');
 
         Juji_Jigyo_Oubo__c app = [
-            SELECT Id, Oubo_Uketuke_No__c, Oubo_Soudanin_Master__c, Oubo_Kaiin__c, Oubo_Shimei__c, Oubo_Juji_Keiken__c,
+            SELECT Id, Oubo_Uketuke_No__c, Oubo_Soudanin_Master__c, Oubo_Kaiin__c, Oubo_Juji_Keiken__c,
                 Oubo_Juji_Kano_Yobi_Flag_Mon__c, Oubo_Juji_Kano_Yobi_Flag_Tue__c,
                 (SELECT Oubo_Meisa_Juji_Kano_Nengapi__c FROM Oubo_Meisa_Juji_Jigyo_Oubo__r)
             FROM Juji_Jigyo_Oubo__c
             WHERE Oubo_Soudanin_Master__c != null
         ];
         Assert.isNull(app.Oubo_Kaiin__c);
-        Assert.areEqual('相談 花子', app.Oubo_Shimei__c, '氏名に従事者の氏名を設定すること');
-        Assert.areEqual('有', app.Oubo_Juji_Keiken__c);
+        Assert.areEqual(KEIKEN_ARI, app.Oubo_Juji_Keiken__c);
         Assert.areEqual(Juj_JigyoOboTourokuController.WEEKDAY_KA, app.Oubo_Juji_Kano_Yobi_Flag_Mon__c);
         Assert.areEqual(Juj_JigyoOboTourokuController.WEEKDAY_FUKA, app.Oubo_Juji_Kano_Yobi_Flag_Tue__c);
         Assert.areEqual(2, app.Oubo_Meisa_Juji_Jigyo_Oubo__r.size(), '時間帯のない日付は登録しないこと');
@@ -467,7 +467,7 @@ private class Juj_JigyoOboTourokuControllerTest {
         Map<String, Object> r = Juj_JigyoOboTourokuController.loadApplication(null, JIGYO_NO, BASYO_NO, NENDO, MEMBER_NO);
         Assert.areEqual(7, ((List<Object>) get(r, 'application.form.weekdays')).size());
         Assert.areEqual(1, ((List<Object>) get(r, 'application.form.skills')).size());
-        Assert.areEqual('有', get(r, 'application.form.keiken'));
+        Assert.areEqual(KEIKEN_ARI, get(r, 'application.form.keiken'));
     }
 
     // 追加モードで登録済みはエラー
@@ -491,7 +491,6 @@ private class Juj_JigyoOboTourokuControllerTest {
 
         Map<String, Object> r = save(req);
         Assert.areEqual(1, num(r, 'uketukeNo'));
-        Assert.areEqual('テスト 太郎', [SELECT Oubo_Shimei__c FROM Juji_Jigyo_Oubo__c WHERE Id = :app.Id].Oubo_Shimei__c);
 
         List<Juji_Jigyo_Oubo_Meisai__c> details = [
             SELECT Oubo_Meisa_Juji_Kano_Nengapi__c, Oubo_Meisai_Kaisi_Jikoku__c, Oubo_Meisai_Syuryo_Jikoku__c
